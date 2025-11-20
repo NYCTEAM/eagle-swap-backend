@@ -1,6 +1,6 @@
 {
   "name": "eagle-swap-backend",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Eagle Swap Backend - DEX backend service with token management, trading, liquidity, and farming features",
   "main": "dist/server.js",
   "scripts": {
