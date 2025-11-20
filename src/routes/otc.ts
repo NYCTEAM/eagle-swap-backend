@@ -10,7 +10,7 @@ import {
 } from '../config/otc-contracts';
 
 const router = Router();
-const db = new Database(path.join(__dirname, '../database/eagle-swap.db'));
+const db = new Database(path.join(__dirname, '../../data/eagleswap.db'));
 
 // 类型定义
 interface OTCStats {
