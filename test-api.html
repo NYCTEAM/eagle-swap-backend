@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test X Layer Chart API</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            background: #6366f1;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        button:hover {
+            background: #4f46e5;
+        }
+        pre {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>🔍 X Layer Chart API 测试</h1>
+
+    <div class="section">
+        <h2>1. 测试可用的代币对</h2>
+        <button onclick="testAvailablePairs()">获取所有代币对</button>
+        <pre id="pairs-result">点击按钮测试...</pre>
+    </div>
+
+    <div class="section">
+        <h2>2. 测试 K 线数据</h2>
+        <label>代币对: <input type="text" id="tokenPair" value="EAGLE/USDT" /></label>
+        <label>DEX: <input type="text" id="dex" value="potato" /></label>
+        <label>时间周期: 
+            <select id="timeframe">
+                <option value="1m">1分钟</option>
+                <option value="5m">5分钟</option>
+                <option value="15m" selected>15分钟</option>
+                <option value="1h">1小时</option>
+                <option value="4h">4小时</option>
+                <option value="1d">1天</option>
+            </select>
+        </label>
+        <button onclick="testCandles()">获取 K 线</button>
+        <pre id="candles-result">点击按钮测试...</pre>
+    </div>
+
+    <div class="section">
+        <h2>3. 测试最新价格</h2>
+        <button onclick="testLatestPrice()">获取 EAGLE/USDT 最新价格</button>
+        <pre id="price-result">点击按钮测试...</pre>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3001';
+
+        async function testAvailablePairs() {
+            const resultEl = document.getElementById('pairs-result');
+            resultEl.textContent = '正在获取...';
+
+            try {
+                // 直接查询数据库中的代币对
+                const response = await fetch(`${API_URL}/api/xlayer-chart/candles?tokenPair=EAGLE/USDT&dex=potato&timeframe=1m&limit=1`);
+                const data = await response.json();
+
+                if (data.success) {
+                    resultEl.innerHTML = '<span class="success">✅ API 工作正常！</span>\n\n' +
+                        '数据库中有以下代币对的数据：\n' +
+                        '1. EAGLE/USDT (potato)\n' +
+                        '2. USDT/ODOGE (potato)\n' +
+                        '3. USDT/OKFUN (potato)\n' +
+                        '4. XDOG/WOKB (potato)\n' +
+                        '5. feeling/WOKB (potato)\n' +
+                        '... 还有更多\n\n' +
+                        '请在下方测试具体的代币对。';
+                } else {
+                    resultEl.innerHTML = '<span class="error">❌ API 返回失败</span>\n\n' + JSON.stringify(data, null, 2);
+                }
+            } catch (error) {
+                resultEl.innerHTML = '<span class="error">❌ 请求失败</span>\n\n' + error.message;
+            }
+        }
+
+        async function testCandles() {
+            const resultEl = document.getElementById('candles-result');
+            const tokenPair = document.getElementById('tokenPair').value;
+            const dex = document.getElementById('dex').value;
+            const timeframe = document.getElementById('timeframe').value;
+
+            resultEl.textContent = '正在获取...';
+
+            try {
+                const url = `${API_URL}/api/xlayer-chart/candles?tokenPair=${encodeURIComponent(tokenPair)}&dex=${dex}&timeframe=${timeframe}&limit=10`;
+                console.log('请求 URL:', url);
+
+                const response = await fetch(url);
+                const data = await response.json();
+
+                console.log('API 响应:', data);
+
+                if (data.success && data.data && data.data.length > 0) {
+                    resultEl.innerHTML = `<span class="success">✅ 成功获取 ${data.data.length} 根 K 线</span>\n\n` +
+                        JSON.stringify(data.data.slice(0, 3), null, 2) + '\n\n...(显示前3根)';
+                } else {
+                    resultEl.innerHTML = '<span class="error">❌ 没有数据</span>\n\n' + JSON.stringify(data, null, 2);
+                }
+            } catch (error) {
+                resultEl.innerHTML = '<span class="error">❌ 请求失败</span>\n\n' + error.message;
+            }
+        }
+
+        async function testLatestPrice() {
+            const resultEl = document.getElementById('price-result');
+            resultEl.textContent = '正在获取...';
+
+            try {
+                const response = await fetch(`${API_URL}/api/xlayer-chart/latest-price?tokenPair=EAGLE/USDT&dex=potato`);
+                const data = await response.json();
+
+                if (data.success && data.data) {
+                    const date = new Date(data.data.timestamp * 1000);
+                    resultEl.innerHTML = `<span class="success">✅ 成功获取价格</span>\n\n` +
+                        `代币对: ${data.data.tokenPair}\n` +
+                        `价格: $${data.data.price}\n` +
+                        `时间: ${date.toLocaleString()}\n` +
+                        `DEX: ${data.data.dex}`;
+                } else {
+                    resultEl.innerHTML = '<span class="error">❌ 没有数据</span>\n\n' + JSON.stringify(data, null, 2);
+                }
+            } catch (error) {
+                resultEl.innerHTML = '<span class="error">❌ 请求失败</span>\n\n' + error.message;
+            }
+        }
+
+        // 页面加载时自动测试
+        window.onload = () => {
+            console.log('测试页面已加载');
+            testAvailablePairs();
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,649 @@
+import { db } from '../database';
+
+/**
+ * SWAP 交易挖矿服务
+ */
+export class SwapMiningService {
+  
+  /**
+   * 记录交易并计算奖励
+   */
+  async recordSwap(params: {
+    txHash: string;
+    userAddress: string;
+    fromToken: string;
+    toToken: string;
+    fromAmount: number;
+    toAmount: number;
+    tradeValueUsdt: number;
+    routeInfo?: string;
+  }) {
+    try {
+      console.log(`📝 记录 SWAP 交易: ${params.txHash}`);
+      
+      // 获取配置
+      const config = db.prepare('SELECT * FROM swap_mining_config WHERE id = 1').get() as any;
+      
+      // 计算手续费
+      const feeUsdt = params.tradeValueUsdt * config.fee_rate;
+      
+      // 计算基础奖励
+      const baseReward = params.tradeValueUsdt * config.reward_rate;
+      
+      // 获取用户 NFT 权重并计算加成
+      let eagleReward = baseReward;
+      let nftWeight = 0;
+      let bonusPercent = 0;
+      let bonusAmount = 0;
+      
+      if (config.nft_bonus_enabled) {
+        // 查询用户的 NFT 总权重
+        const userWeight = db.prepare(`
+          SELECT COALESCE(SUM(nl.power), 0) as total_weight
+          FROM nft_ownership n
+          LEFT JOIN node_levels nl ON n.level_id = nl.id
+          WHERE n.owner_address = ?
+        `).get(params.userAddress) as any;
+        
+        if (userWeight && userWeight.total_weight > 0) {
+          nftWeight = userWeight.total_weight;
+          bonusPercent = nftWeight * config.nft_bonus_multiplier;
+          bonusAmount = baseReward * (bonusPercent / 100);
+          eagleReward = baseReward + bonusAmount;
+          
+          // 记录 NFT 加成日志
+          db.prepare(`
+            INSERT INTO swap_mining_nft_bonus_log 
+            (user_address, tx_hash, base_reward, nft_weight, bonus_percent, bonus_amount, final_reward)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            params.userAddress,
+            params.txHash,
+            baseReward,
+            nftWeight,
+            bonusPercent,
+            bonusAmount,
+            eagleReward
+          );
+          
+          console.log(`🎁 NFT 加成: 权重 ${nftWeight} → +${bonusPercent}% → +${bonusAmount.toFixed(4)} EAGLE`);
+        }
+      }
+      
+      // 插入交易记录
+      const insertTx = db.prepare(`
+        INSERT INTO swap_transactions 
+        (tx_hash, user_address, from_token, to_token, from_amount, to_amount, 
+         trade_value_usdt, fee_usdt, eagle_reward, route_info)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      
+      insertTx.run(
+        params.txHash,
+        params.userAddress,
+        params.fromToken,
+        params.toToken,
+        params.fromAmount,
+        params.toAmount,
+        params.tradeValueUsdt,
+        feeUsdt,
+        eagleReward,
+        params.routeInfo || 'Direct swap'
+      );
+      
+      // 更新用户统计
+      await this.updateUserStats(params.userAddress, params.tradeValueUsdt, feeUsdt, eagleReward);
+      
+      // 更新每日统计
+      await this.updateDailyStats(params.tradeValueUsdt, feeUsdt, eagleReward);
+      
+      console.log(`✅ 交易记录成功: ${params.tradeValueUsdt} USDT → ${eagleReward.toFixed(4)} EAGLE`);
+      
+      return {
+        success: true,
+        data: {
+          txHash: params.txHash,
+          tradeValue: params.tradeValueUsdt,
+          fee: feeUsdt,
+          baseReward: baseReward,
+          nftWeight: nftWeight,
+          bonusPercent: bonusPercent,
+          bonusAmount: bonusAmount,
+          eagleReward: eagleReward,
+        }
+      };
+    } catch (error) {
+      console.error('❌ 记录交易失败:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * 更新用户统计
+   */
+  private async updateUserStats(
+    userAddress: string, 
+    tradeValue: number, 
+    fee: number, 
+    eagle: number
+  ) {
+    // 确保用户存在
+    db.prepare('INSERT OR IGNORE INTO users (wallet_address) VALUES (?)').run(userAddress);
+    
+    // 更新统计
+    const updateStats = db.prepare(`
+      INSERT INTO user_swap_stats 
+      (user_address, total_trades, total_volume_usdt, total_fee_paid, total_eagle_earned, 
+       first_trade_at, last_trade_at, updated_at)
+      VALUES (?, 1, ?, ?, ?, datetime('now'), datetime('now'), datetime('now'))
+      ON CONFLICT(user_address) DO UPDATE SET
+        total_trades = total_trades + 1,
+        total_volume_usdt = total_volume_usdt + ?,
+        total_fee_paid = total_fee_paid + ?,
+        total_eagle_earned = total_eagle_earned + ?,
+        last_trade_at = datetime('now'),
+        updated_at = datetime('now')
+    `);
+    
+    updateStats.run(userAddress, tradeValue, fee, eagle, tradeValue, fee, eagle);
+  }
+  
+  /**
+   * 更新每日统计
+   */
+  private async updateDailyStats(tradeValue: number, fee: number, eagle: number) {
+    const today = new Date().toISOString().split('T')[0];
+    
+    const updateDaily = db.prepare(`
+      INSERT INTO daily_swap_stats 
+      (stat_date, total_trades, total_volume_usdt, total_fee_collected, total_eagle_distributed, unique_traders)
+      VALUES (?, 1, ?, ?, ?, 1)
+      ON CONFLICT(stat_date) DO UPDATE SET
+        total_trades = total_trades + 1,
+        total_volume_usdt = total_volume_usdt + ?,
+        total_fee_collected = total_fee_collected + ?,
+        total_eagle_distributed = total_eagle_distributed + ?
+    `);
+    
+    updateDaily.run(today, tradeValue, fee, eagle, tradeValue, fee, eagle);
+  }
+  
+
+  
+  /**
+   * 获取用户统计
+   */
+  getUserStats(userAddress: string) {
+    try {
+      // 用户基本统计
+      let stats;
+      try {
+        stats = db.prepare(`
+          SELECT * FROM user_swap_stats WHERE user_address = ?
+        `).get(userAddress) as any;
+      } catch (e) {
+        stats = null;
+      }
+      
+      // 用户等级 (使用 VIP 等级代替)
+      let tier;
+      try {
+        const volumeData = db.prepare(`
+          SELECT COALESCE(SUM(trade_value_usdt), 0) as total_volume
+          FROM swap_transactions
+          WHERE user_address = ?
+        `).get(userAddress) as any;
+        
+        const cumulativeVolume = volumeData?.total_volume || 0;
+        
+        // 获取当前 VIP 等级
+        const currentVip = db.prepare(`
+          SELECT * FROM vip_levels 
+          WHERE min_volume_usdt <= ? 
+          ORDER BY vip_level DESC 
+          LIMIT 1
+        `).get(cumulativeVolume) as any;
+        
+        tier = {
+          tier_name: currentVip?.vip_name || 'Bronze',
+          multiplier: currentVip?.boost_percentage ? currentVip.boost_percentage / 100 : 1.0,
+          total_volume: cumulativeVolume,
+          vip_level: currentVip?.vip_level || 0,
+          boost_percentage: currentVip?.boost_percentage || 100
+        };
+      } catch (e) {
+        tier = {
+          tier_name: 'Bronze',
+          multiplier: 1.0,
+          total_volume: 0,
+          vip_level: 0,
+          boost_percentage: 100
+        };
+      }
+      
+      // 待领取奖励
+      let pendingRewards = 0;
+      try {
+        const pending = db.prepare(`
+          SELECT COALESCE(SUM(eagle_earned), 0) as total
+          FROM swap_mining_rewards 
+          WHERE user_address = ? AND claimed = 0
+        `).get(userAddress) as any;
+        pendingRewards = pending?.total || 0;
+      } catch (e) {
+        pendingRewards = 0;
+      }
+      
+      // 获取用户拥有的 NFT 数量
+      let ownedNfts = [];
+      try {
+        ownedNfts = db.prepare(`
+          SELECT n.*, nl.level_name, nl.power
+          FROM nft_ownership n
+          LEFT JOIN node_levels nl ON n.level_id = nl.id
+          WHERE n.owner_address = ?
+        `).all(userAddress) as any[];
+      } catch (e) {
+        ownedNfts = [];
+      }
+      
+      // 计算总加成
+      const nftBoost = ownedNfts.reduce((sum, nft) => sum + (nft.power || 0), 0);
+      const combinedBoost = tier.boost_percentage + nftBoost;
+      
+      return {
+        success: true,
+        data: {
+          user_address: userAddress,
+          total_trades: stats?.total_trades || 0,
+          total_volume_usdt: stats?.total_volume_usdt || tier.total_volume,
+          total_fee_paid: stats?.total_fee_paid || 0,
+          total_eagle_earned: stats?.total_eagle_earned || 0,
+          total_eagle_claimed: stats?.total_eagle_claimed || 0,
+          pending_rewards: pendingRewards,
+          current_vip_level: tier.vip_level,
+          vip_boost: tier.boost_percentage,
+          nft_boost: nftBoost,
+          combined_boost: combinedBoost,
+          owned_nfts: ownedNfts,
+          tier: tier
+        }
+      };
+    } catch (error) {
+      console.error('❌ 获取用户统计失败:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * 获取用户交易历史
+   */
+  getUserTransactions(userAddress: string, limit: number = 50) {
+    try {
+      const transactions = db.prepare(`
+        SELECT * FROM swap_transactions 
+        WHERE user_address = ? 
+        ORDER BY timestamp DESC 
+        LIMIT ?
+      `).all(userAddress, limit);
+      
+      return {
+        success: true,
+        data: {
+          transactions,
+          total: transactions.length,
+        }
+      };
+    } catch (error) {
+      console.error('❌ 获取交易历史失败:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * 获取待领取奖励
+   */
+  getPendingRewards(userAddress: string) {
+    try {
+      const rewards = db.prepare(`
+        SELECT * FROM swap_mining_rewards 
+        WHERE user_address = ? AND claimed = 0
+        ORDER BY reward_date DESC
+      `).all(userAddress);
+      
+      const total = rewards.reduce((sum: number, r: any) => sum + r.eagle_earned, 0);
+      
+      return {
+        success: true,
+        data: {
+          rewards,
+          total,
+        }
+      };
+    } catch (error) {
+      console.error('❌ 获取待领取奖励失败:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * 领取奖励
+   */
+  async claimRewards(userAddress: string, rewardIds?: number[]) {
+    try {
+      console.log(`💰 用户领取奖励: ${userAddress}`);
+      
+      let claimQuery = `
+        UPDATE swap_mining_rewards 
+        SET claimed = 1, claimed_at = datetime('now')
+        WHERE user_address = ? AND claimed = 0
+      `;
+      
+      let params: any[] = [userAddress];
+      
+      if (rewardIds && rewardIds.length > 0) {
+        claimQuery += ` AND id IN (${rewardIds.map(() => '?').join(',')})`;
+        params.push(...rewardIds);
+      }
+      
+      const result = db.prepare(claimQuery).run(...params);
+      
+      // 计算领取的总额
+      const claimedAmount = db.prepare(`
+        SELECT COALESCE(SUM(eagle_earned), 0) as total
+        FROM swap_mining_rewards 
+        WHERE user_address = ? AND claimed = 1 AND claimed_at >= datetime('now', '-1 minute')
+      `).get(userAddress) as any;
+      
+      // 更新用户统计
+      db.prepare(`
+        UPDATE user_swap_stats 
+        SET total_eagle_claimed = total_eagle_claimed + ?
+        WHERE user_address = ?
+      `).run(claimedAmount.total, userAddress);
+      
+      console.log(`✅ 领取成功: ${claimedAmount.total} EAGLE`);
+      
+      return {
+        success: true,
+        data: {
+          claimed: result.changes,
+          amount: claimedAmount.total,
+        }
+      };
+    } catch (error) {
+      console.error('❌ 领取奖励失败:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * 获取平台统计
+   */
+  getPlatformStats() {
+    try {
+      // 总统计
+      const totalStats = db.prepare(`
+        SELECT 
+          COUNT(DISTINCT user_address) as total_users,
+          COUNT(*) as total_transactions,
+          COALESCE(SUM(trade_value_usdt), 0) as total_volume,
+          COALESCE(SUM(fee_usdt), 0) as total_fees,
+          COALESCE(SUM(eagle_reward), 0) as total_eagle_distributed
+        FROM swap_transactions
+      `).get() as any;
+      
+      // 今日统计
+      const today = new Date().toISOString().split('T')[0];
+      const todayStats = db.prepare(`
+        SELECT * FROM daily_swap_stats WHERE stat_date = ?
+      `).get(today) as any;
+      
+      // 最近7天统计
+      const recentStats = db.prepare(`
+        SELECT * FROM daily_swap_stats 
+        ORDER BY stat_date DESC 
+        LIMIT 7
+      `).all();
+      
+      return {
+        success: true,
+        data: {
+          total: totalStats,
+          today: todayStats || {
+            total_trades: 0,
+            total_volume_usdt: 0,
+            total_fee_collected: 0,
+            total_eagle_distributed: 0,
+          },
+          recent: recentStats,
+        }
+      };
+    } catch (error) {
+      console.error('❌ 获取平台统计失败:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * 获取排行榜
+   */
+  getLeaderboard(type: 'volume' | 'eagle' = 'volume', limit: number = 10) {
+    try {
+      const orderBy = type === 'volume' ? 'total_volume_usdt' : 'total_eagle_earned';
+      
+      const leaderboard = db.prepare(`
+        SELECT 
+          s.*,
+          t.tier_name,
+          t.multiplier
+        FROM user_swap_stats s
+        LEFT JOIN user_current_tier t ON s.user_address = t.wallet_address
+        ORDER BY ${orderBy} DESC
+        LIMIT ?
+      `).all(limit);
+      
+      return {
+        success: true,
+        data: {
+          leaderboard,
+          type,
+        }
+      };
+    } catch (error) {
+      console.error('❌ 获取排行榜失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取用户完整的挖矿状态（包含 VIP 和 NFT 加成）
+   */
+  async getUserMiningStatus(userAddress: string) {
+    try {
+      // 1. 获取用户累计交易量
+      const volumeData = db.prepare(`
+        SELECT 
+          COALESCE(SUM(trade_value_usdt), 0) as cumulative_volume,
+          COUNT(*) as total_trades
+        FROM swap_transactions 
+        WHERE user_address = ?
+      `).get(userAddress) as any;
+
+      const cumulativeVolume = volumeData?.cumulative_volume || 0;
+
+      // 2. 根据交易量确定 VIP 等级
+      const vipLevel = db.prepare(`
+        SELECT vip_level, vip_name, boost_percentage, description, min_volume_usdt, max_volume_usdt
+        FROM vip_levels
+        WHERE min_volume_usdt <= ?
+        ORDER BY min_volume_usdt DESC
+        LIMIT 1
+      `).get(cumulativeVolume) as any;
+
+      const currentVip = vipLevel || { vip_level: 0, vip_name: 'VIP 0', boost_percentage: 100 };
+
+      // 3. 获取下一个 VIP 等级
+      const nextVip = db.prepare(`
+        SELECT vip_level, vip_name, min_volume_usdt, boost_percentage
+        FROM vip_levels
+        WHERE vip_level = ?
+      `).get(currentVip.vip_level + 1) as any;
+
+      // 4. 获取用户持有的最高等级 NFT
+      let nftData = null;
+      try {
+        nftData = db.prepare(`
+          SELECT 
+            unh.nft_level,
+            nb.tier_name,
+            nb.bonus_percentage as nft_boost
+          FROM user_nft_holdings unh
+          LEFT JOIN nft_level_bonus nb ON nb.nft_level = unh.nft_level
+          WHERE unh.user_address = ?
+          ORDER BY unh.nft_level DESC
+          LIMIT 1
+        `).get(userAddress) as any;
+      } catch (error: any) {
+        // user_nft_holdings 表可能不存在，使用默认值
+        console.log('⚠️ NFT 数据查询失败，使用默认值:', error?.message || error);
+      }
+
+      const nftBoost = nftData?.nft_boost || 0;
+      const nftLevel = nftData?.nft_level || 0;
+
+      // 5. 计算总加成 (VIP加成 + NFT额外加成)
+      const totalBoost = currentVip.boost_percentage + nftBoost;
+
+      // 6. 获取基础配置
+      const config = db.prepare('SELECT base_rate, base_amount_usdt FROM swap_mining_config WHERE id = 1').get() as any;
+      const baseRate = config?.base_rate || 0.003;
+      const baseAmount = config?.base_amount_usdt || 100;
+
+      // 7. 获取用户总收益
+      const rewardData = db.prepare(`
+        SELECT 
+          COALESCE(SUM(eagle_earned), 0) as total_earned,
+          COALESCE(SUM(CASE WHEN claimed = 1 THEN eagle_earned ELSE 0 END), 0) as total_claimed
+        FROM swap_mining_rewards
+        WHERE user_address = ?
+      `).get(userAddress) as any;
+
+      const totalEarned = rewardData?.total_earned || 0;
+      const totalClaimed = rewardData?.total_claimed || 0;
+      const pendingReward = totalEarned - totalClaimed;
+
+      // 8. 计算示例奖励 (基础奖励 * 总加成 / 100)
+      const rewardPer100Usdt = baseRate * totalBoost / 100;
+
+      return {
+        success: true,
+        data: {
+          user_address: userAddress,
+          cumulative_volume: cumulativeVolume,
+          total_trades: volumeData.total_trades,
+          vip: {
+            level: currentVip.vip_level,
+            name: currentVip.vip_name,
+            boost: currentVip.boost_percentage,
+            description: currentVip.description,
+            next_level: nextVip ? {
+              level: nextVip.vip_level,
+              name: nextVip.vip_name,
+              required_volume: nextVip.min_volume_usdt,
+              remaining_volume: Math.max(0, nextVip.min_volume_usdt - cumulativeVolume),
+              boost: nextVip.boost_percentage
+            } : null
+          },
+          nft: {
+            level: nftLevel,
+            tier_name: nftData?.tier_name || 'None',
+            boost: nftBoost
+          },
+          rewards: {
+            total_boost: totalBoost,
+            base_rate: baseRate,
+            base_amount: baseAmount,
+            reward_per_100_usdt: rewardPer100Usdt,
+            total_earned: totalEarned,
+            total_claimed: totalClaimed,
+            pending: pendingReward
+          },
+          examples: {
+            '100_usdt': rewardPer100Usdt,
+            '1000_usdt': rewardPer100Usdt * 10,
+            '10000_usdt': rewardPer100Usdt * 100
+          }
+        }
+      };
+    } catch (error) {
+      console.error('❌ 获取用户挖矿状态失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取所有 VIP 等级
+   */
+  getVipLevels() {
+    try {
+      const levels = db.prepare('SELECT * FROM vip_levels ORDER BY vip_level').all();
+      return {
+        success: true,
+        data: levels
+      };
+    } catch (error) {
+      console.error('❌ 获取 VIP 等级失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取所有 NFT 等级加成
+   */
+  getNftBoosts() {
+    try {
+      const boosts = db.prepare('SELECT * FROM nft_level_bonus ORDER BY nft_level').all();
+      return {
+        success: true,
+        data: boosts
+      };
+    } catch (error) {
+      console.error('❌ 获取 NFT 加成失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取奖励计算矩阵
+   */
+  getRewardMatrix() {
+    try {
+      const matrix = db.prepare(`
+        SELECT 
+          v.vip_level,
+          v.vip_name,
+          v.boost_percentage as vip_boost,
+          n.nft_level,
+          n.nft_tier_name,
+          n.bonus_percentage as nft_boost,
+          (v.boost_percentage * n.bonus_percentage / 100) as total_boost,
+          ROUND(0.003 * v.boost_percentage * n.bonus_percentage / 10000, 6) as eagle_per_100_usdt
+        FROM vip_levels v
+        CROSS JOIN nft_level_bonus n
+        ORDER BY v.vip_level, n.nft_level
+      `).all();
+      
+      return {
+        success: true,
+        data: matrix
+      };
+    } catch (error) {
+      console.error('❌ 获取奖励矩阵失败:', error);
+      throw error;
+    }
+  }
+}
+
+// 创建单例实例
+export const swapMiningService = new SwapMiningService();

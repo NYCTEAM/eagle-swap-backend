@@ -1,0 +1,54 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "lib": ["ES2020"],
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "removeComments": false,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "noImplicitReturns": false,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": false,
+    "noImplicitOverride": true,
+    "allowUnusedLabels": false,
+    "allowUnreachableCode": false,
+    "exactOptionalPropertyTypes": false,
+    "moduleResolution": "node",
+    "baseUrl": "./",
+    "paths": {
+      "@/*": ["src/*"],
+      "@/types": ["src/types"],
+      "@/services": ["src/services"],
+      "@/routes": ["src/routes"],
+      "@/middleware": ["src/middleware"],
+      "@/utils": ["src/utils"],
+      "@/database": ["src/database"]
+    },
+    "typeRoots": ["./node_modules/@types"],
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "**/*.spec.ts"
+  ],
+  "ts-node": {
+    "require": ["tsconfig-paths/register"]
+  }
+}
