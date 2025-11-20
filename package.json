@@ -17,7 +17,7 @@
     "db:seed": "ts-node src/database/seed.ts",
     "db:migrate": "echo 'Migration script not implemented yet'",
     "check": "tsc --noEmit",
-    "clean": "rimraf dist",
+    "clean": "npx rimraf dist || rm -rf dist",
     "prebuild": "npm run clean"
   },
   "keywords": [
