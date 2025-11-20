@@ -24,6 +24,7 @@ import dashboardRouter from './routes/dashboard';
 import swapHistoryRouter from './routes/swapHistory';
 import xlayerChartRouter from './routes/xlayerChart';
 import marketplaceRouter from './routes/nftMarketplace';
+import otcRouter from './routes/otc';
 
 const app = express();
 
@@ -60,7 +61,9 @@ const corsOptions = {
       'http://127.0.0.1:3002',
       'http://127.0.0.1:3005',
       'https://eagleswap.llc',
-      'http://eagleswap.llc'
+      'https://www.eagleswap.llc',
+      'http://eagleswap.llc',
+      'http://www.eagleswap.llc'
     ];
 
     // Add production origins from environment
@@ -139,6 +142,7 @@ app.use('/api/dashboard', dashboardRouter);
 app.use('/api/swap-history', swapHistoryRouter);
 app.use('/api/xlayer-chart', xlayerChartRouter);
 app.use('/api/marketplace', marketplaceRouter);
+app.use('/api/otc', otcRouter);
 
 // Root endpoint
 app.get('/', (req, res) => {
