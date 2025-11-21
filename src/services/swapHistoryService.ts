@@ -1,5 +1,4 @@
-import { Database } from 'sqlite3';
-import { getDatabase } from '../database/init';
+import { db } from '../database';
 import { logger } from '../utils/logger';
 
 export interface SwapTransaction {
@@ -64,15 +63,11 @@ export interface LimitOrder {
 }
 
 export class SwapHistoryService {
-  private get db(): Database {
-    return getDatabase();
-  }
-
   /**
    * 记录 Swap 交易
    */
   async recordSwapTransaction(swap: SwapTransaction): Promise<number> {
-    return new Promise((resolve, reject) => {
+    try {
       const query = `
         INSERT INTO swap_transactions (
           tx_hash, user_address, token_in, token_out,
@@ -82,35 +77,29 @@ export class SwapHistoryService {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
 
-      this.db.run(
-        query,
-        [
-          swap.tx_hash,
-          swap.user_address.toLowerCase(),
-          swap.token_in.toLowerCase(),
-          swap.token_out.toLowerCase(),
-          swap.amount_in,
-          swap.amount_out,
-          swap.dex_name,
-          swap.platform_fee,
-          swap.execution_price,
-          swap.slippage || null,
-          swap.status,
-          swap.block_number || null,
-          swap.timestamp,
-          swap.chain_id,
-        ],
-        function (err: Error | null) {
-          if (err) {
-            logger.error('Failed to record swap transaction', { error: err.message, swap });
-            reject(err);
-          } else {
-            logger.info('Swap transaction recorded', { id: this.lastID, tx_hash: swap.tx_hash });
-            resolve(this.lastID);
-          }
-        }
+      const result = db.prepare(query).run(
+        swap.tx_hash,
+        swap.user_address.toLowerCase(),
+        swap.token_in.toLowerCase(),
+        swap.token_out.toLowerCase(),
+        swap.amount_in,
+        swap.amount_out,
+        swap.dex_name,
+        swap.platform_fee,
+        swap.execution_price,
+        swap.slippage || null,
+        swap.status,
+        swap.block_number || null,
+        swap.timestamp,
+        swap.chain_id
       );
-    });
+
+      logger.info('Swap transaction recorded', { id: result.lastInsertRowid, tx_hash: swap.tx_hash });
+      return result.lastInsertRowid as number;
+    } catch (err: any) {
+      logger.error('Failed to record swap transaction', { error: err.message, swap });
+      throw err;
+    }
   }
 
   /**
@@ -123,7 +112,7 @@ export class SwapHistoryService {
     offset: number = 0,
     swapType?: string
   ): Promise<SwapTransaction[]> {
-    return new Promise((resolve, reject) => {
+    try {
       let query = `
         SELECT * FROM swap_transactions
         WHERE user_address = ? AND chain_id = ?
@@ -138,19 +127,12 @@ export class SwapHistoryService {
       query += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?';
       params.push(limit, offset);
 
-      this.db.all(
-        query,
-        params,
-        (err: Error | null, rows: any[]) => {
-          if (err) {
-            logger.error('Failed to get user swap history', { error: err.message, userAddress });
-            reject(err);
-          } else {
-            resolve(rows as SwapTransaction[]);
-          }
-        }
-      );
-    });
+      const rows = db.prepare(query).all(...params);
+      return rows as SwapTransaction[];
+    } catch (err: any) {
+      logger.error('Failed to get user swap history', { error: err.message, userAddress });
+      throw err;
+    }
   }
 
   /**
@@ -161,7 +143,7 @@ export class SwapHistoryService {
     chainId: number,
     swapType?: string
   ): Promise<number> {
-    return new Promise((resolve, reject) => {
+    try {
       let query = `
         SELECT COUNT(*) as count FROM swap_transactions
         WHERE user_address = ? AND chain_id = ?
@@ -173,26 +155,19 @@ export class SwapHistoryService {
         params.push(swapType);
       }
 
-      this.db.get(
-        query,
-        params,
-        (err: Error | null, row: any) => {
-          if (err) {
-            logger.error('Failed to get user swap count', { error: err.message, userAddress });
-            reject(err);
-          } else {
-            resolve(row.count || 0);
-          }
-        }
-      );
-    });
+      const row: any = db.prepare(query).get(...params);
+      return row?.count || 0;
+    } catch (err: any) {
+      logger.error('Failed to get user swap count', { error: err.message, userAddress });
+      throw err;
+    }
   }
 
   /**
    * 创建 TWAP 订单记录
    */
   async createTWAPOrder(order: TWAPOrder): Promise<number> {
-    return new Promise((resolve, reject) => {
+    try {
       const query = `
         INSERT INTO twap_orders (
           order_id, user_address, token_in, token_out,
@@ -202,37 +177,31 @@ export class SwapHistoryService {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
 
-      this.db.run(
-        query,
-        [
-          order.order_id,
-          order.user_address.toLowerCase(),
-          order.token_in.toLowerCase(),
-          order.token_out.toLowerCase(),
-          order.total_amount,
-          order.amount_per_trade,
-          order.total_trades,
-          order.executed_trades,
-          order.trade_interval,
-          order.max_duration,
-          order.order_type,
-          order.min_amount_out || null,
-          order.status,
-          order.created_tx_hash || null,
-          order.created_at_timestamp,
-          order.chain_id,
-        ],
-        function (err: Error | null) {
-          if (err) {
-            logger.error('Failed to create TWAP order', { error: err.message, order });
-            reject(err);
-          } else {
-            logger.info('TWAP order created', { id: this.lastID, order_id: order.order_id });
-            resolve(this.lastID);
-          }
-        }
+      const result = db.prepare(query).run(
+        order.order_id,
+        order.user_address.toLowerCase(),
+        order.token_in.toLowerCase(),
+        order.token_out.toLowerCase(),
+        order.total_amount,
+        order.amount_per_trade,
+        order.total_trades,
+        order.executed_trades,
+        order.trade_interval,
+        order.max_duration,
+        order.order_type,
+        order.min_amount_out || null,
+        order.status,
+        order.created_tx_hash || null,
+        order.created_at_timestamp,
+        order.chain_id
       );
-    });
+
+      logger.info('TWAP order created', { id: result.lastInsertRowid, order_id: order.order_id });
+      return result.lastInsertRowid as number;
+    } catch (err: any) {
+      logger.error('Failed to create TWAP order', { error: err.message, order });
+      throw err;
+    }
   }
 
   /**
@@ -243,7 +212,7 @@ export class SwapHistoryService {
     chainId: number,
     status?: string
   ): Promise<TWAPOrder[]> {
-    return new Promise((resolve, reject) => {
+    try {
       let query = `
         SELECT * FROM twap_orders
         WHERE user_address = ? AND chain_id = ?
@@ -257,22 +226,19 @@ export class SwapHistoryService {
 
       query += ' ORDER BY created_at_timestamp DESC';
 
-      this.db.all(query, params, (err: Error | null, rows: any[]) => {
-        if (err) {
-          logger.error('Failed to get user TWAP orders', { error: err.message, userAddress });
-          reject(err);
-        } else {
-          resolve(rows as TWAPOrder[]);
-        }
-      });
-    });
+      const rows = db.prepare(query).all(...params);
+      return rows as TWAPOrder[];
+    } catch (err: any) {
+      logger.error('Failed to get user TWAP orders', { error: err.message, userAddress });
+      throw err;
+    }
   }
 
   /**
    * 创建 Limit Order 记录
    */
   async createLimitOrder(order: LimitOrder): Promise<number> {
-    return new Promise((resolve, reject) => {
+    try {
       const query = `
         INSERT INTO limit_orders (
           order_id, user_address, token_in, token_out,
@@ -281,33 +247,27 @@ export class SwapHistoryService {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
 
-      this.db.run(
-        query,
-        [
-          order.order_id,
-          order.user_address.toLowerCase(),
-          order.token_in.toLowerCase(),
-          order.token_out.toLowerCase(),
-          order.amount_in,
-          order.min_amount_out,
-          order.limit_price,
-          order.expiry_time,
-          order.status,
-          order.created_tx_hash || null,
-          order.created_at_timestamp,
-          order.chain_id,
-        ],
-        function (err: Error | null) {
-          if (err) {
-            logger.error('Failed to create limit order', { error: err.message, order });
-            reject(err);
-          } else {
-            logger.info('Limit order created', { id: this.lastID, order_id: order.order_id });
-            resolve(this.lastID);
-          }
-        }
+      const result = db.prepare(query).run(
+        order.order_id,
+        order.user_address.toLowerCase(),
+        order.token_in.toLowerCase(),
+        order.token_out.toLowerCase(),
+        order.amount_in,
+        order.min_amount_out,
+        order.limit_price,
+        order.expiry_time,
+        order.status,
+        order.created_tx_hash || null,
+        order.created_at_timestamp,
+        order.chain_id
       );
-    });
+
+      logger.info('Limit order created', { id: result.lastInsertRowid, order_id: order.order_id });
+      return result.lastInsertRowid as number;
+    } catch (err: any) {
+      logger.error('Failed to create limit order', { error: err.message, order });
+      throw err;
+    }
   }
 
   /**
@@ -318,7 +278,7 @@ export class SwapHistoryService {
     chainId: number,
     status?: string
   ): Promise<LimitOrder[]> {
-    return new Promise((resolve, reject) => {
+    try {
       let query = `
         SELECT * FROM limit_orders
         WHERE user_address = ? AND chain_id = ?
@@ -332,15 +292,12 @@ export class SwapHistoryService {
 
       query += ' ORDER BY created_at_timestamp DESC';
 
-      this.db.all(query, params, (err: Error | null, rows: any[]) => {
-        if (err) {
-          logger.error('Failed to get user limit orders', { error: err.message, userAddress });
-          reject(err);
-        } else {
-          resolve(rows as LimitOrder[]);
-        }
-      });
-    });
+      const rows = db.prepare(query).all(...params);
+      return rows as LimitOrder[];
+    } catch (err: any) {
+      logger.error('Failed to get user limit orders', { error: err.message, userAddress });
+      throw err;
+    }
   }
 
   /**
@@ -352,7 +309,7 @@ export class SwapHistoryService {
     feesPaidUsd: number,
     chainId: number
   ): Promise<void> {
-    return new Promise((resolve, reject) => {
+    try {
       const query = `
         INSERT INTO user_swap_stats (
           user_address, total_swaps, total_volume_usd, total_fees_paid_usd,
@@ -366,51 +323,36 @@ export class SwapHistoryService {
           updated_at = CURRENT_TIMESTAMP
       `;
 
-      this.db.run(
-        query,
-        [
-          userAddress.toLowerCase(),
-          volumeUsd,
-          feesPaidUsd,
-          chainId,
-          volumeUsd,
-          feesPaidUsd,
-        ],
-        (err: Error | null) => {
-          if (err) {
-            logger.error('Failed to update user stats', { error: err.message, userAddress });
-            reject(err);
-          } else {
-            resolve();
-          }
-        }
+      db.prepare(query).run(
+        userAddress.toLowerCase(),
+        volumeUsd,
+        feesPaidUsd,
+        chainId,
+        volumeUsd,
+        feesPaidUsd
       );
-    });
+    } catch (err: any) {
+      logger.error('Failed to update user stats', { error: err.message, userAddress });
+      throw err;
+    }
   }
 
   /**
    * 获取用户统计
    */
   async getUserStats(userAddress: string, chainId: number): Promise<any> {
-    return new Promise((resolve, reject) => {
+    try {
       const query = `
         SELECT * FROM user_swap_stats
         WHERE user_address = ? AND chain_id = ?
       `;
 
-      this.db.get(
-        query,
-        [userAddress.toLowerCase(), chainId],
-        (err: Error | null, row: any) => {
-          if (err) {
-            logger.error('Failed to get user stats', { error: err.message, userAddress });
-            reject(err);
-          } else {
-            resolve(row || null);
-          }
-        }
-      );
-    });
+      const row: any = db.prepare(query).get(userAddress.toLowerCase(), chainId);
+      return row || null;
+    } catch (err: any) {
+      logger.error('Failed to get user stats', { error: err.message, userAddress });
+      throw err;
+    }
   }
 }
 
