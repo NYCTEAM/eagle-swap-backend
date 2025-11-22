@@ -3,7 +3,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 
 const router = Router();
-const dbPath = process.env.DATABASE_PATH || path.join(__dirname, '../../data/eagle-swap.db');
+const dbPath = process.env.DATABASE_PATH || path.join(__dirname, '../../data/eagleswap.db');
 
 // 获取数据库连接
 function getDb() {

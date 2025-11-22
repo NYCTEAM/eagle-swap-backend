@@ -41,7 +41,7 @@ const startServer = async () => {
       logger.info('Configuration loaded', {
         eagleRpcBackendUrl: process.env.EAGLE_RPC_BACKEND_URL || 'http://localhost:3000',
         eagleIndexerUrl: process.env.EAGLE_INDEXER_URL || 'http://localhost:3005',
-        databasePath: process.env.DATABASE_PATH || './data/eagle-swap.db',
+        databasePath: process.env.DATABASE_PATH || './data/eagleswap.db',
         logLevel: process.env.LOG_LEVEL || 'info',
         nodeEnv: process.env.NODE_ENV || 'development'
       });
@@ -58,7 +58,7 @@ const startServer = async () => {
 ║  📈 Eagle Indexer: ${process.env.EAGLE_INDEXER_URL || 'http://localhost:3005'}               ║
 ║                                                              ║
 ║  Environment: ${(process.env.NODE_ENV || 'development').toUpperCase().padEnd(11)}                        ║
-║  Database: ${(process.env.DATABASE_PATH || './data/eagle-swap.db').padEnd(15)}                ║
+║  Database: ${(process.env.DATABASE_PATH || './data/eagleswap.db').padEnd(15)}                ║
 ╚══════════════════════════════════════════════════════════════╝
       `);
     });
