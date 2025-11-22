@@ -40,8 +40,8 @@ export class HotPairsMonitor {
   private readonly MAX_PAIRS_TO_TRACK = 200; // 最多追踪200个代币对
 
   constructor() {
-    // 使用你自己的 RPC - 无限制，全功能
-    const rpcUrl = 'https://rpc.eagleswap.llc/v1/rpc/egs_33d61a80da0db63ca04054a649df70e152c361b99b45efcd';
+    // 使用 Eagle Swap 自定义 X Layer RPC 节点
+    const rpcUrl = process.env.XLAYER_RPC_URL || process.env.CUSTOM_RPC_URL || 'https://rpc1.eagleswap.llc/xlayer/';
     // 使用自定义 Provider
     this.provider = createCustomProvider(rpcUrl);
   }
