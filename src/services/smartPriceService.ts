@@ -51,7 +51,8 @@ export class SmartPriceService {
   private readonly CACHE_TTL = 60 * 1000; // 1分钟缓存
 
   constructor() {
-    const rpcUrl = process.env.CUSTOM_RPC_URL || 'https://rpc.eagleswap.llc/v1/rpc/egs_33d61a80da0db63ca04054a649df70e152c361b99b45efcd';
+    // 使用 Eagle Swap 自定义 X Layer RPC 节点
+    const rpcUrl = process.env.XLAYER_RPC_URL || process.env.CUSTOM_RPC_URL || 'https://rpc1.eagleswap.llc/xlayer/';
     this.provider = createCustomProvider(rpcUrl);
     logger.info('Smart Price Service initialized');
   }

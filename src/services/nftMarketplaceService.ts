@@ -14,7 +14,8 @@ export class NFTMarketplaceService {
     private nftContract: ethers.Contract;
     
     constructor() {
-        const rpcUrl = process.env.RPC_URL || 'https://rpc.xlayer.tech';
+        // 使用 Eagle Swap 自定义 X Layer RPC 节点
+        const rpcUrl = process.env.XLAYER_RPC_URL || process.env.RPC_URL || 'https://rpc1.eagleswap.llc/xlayer/';
         this.provider = new ethers.JsonRpcProvider(rpcUrl);
         
         const nftAddress = process.env.NFT_CONTRACT_ADDRESS || '';

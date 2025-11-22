@@ -48,6 +48,7 @@ export class CustomRpcProvider extends ethers.JsonRpcProvider {
  * 创建自定义 RPC Provider
  */
 export function createCustomProvider(rpcUrl?: string): CustomRpcProvider {
-  const url = rpcUrl || process.env.CUSTOM_RPC_URL || 'https://rpc.eagleswap.llc/v1/rpc/egs_33d61a80da0db63ca04054a649df70e152c361b99b45efcd';
+  // 使用 Eagle Swap 自定义 X Layer RPC 节点
+  const url = rpcUrl || process.env.XLAYER_RPC_URL || process.env.CUSTOM_RPC_URL || 'https://rpc1.eagleswap.llc/xlayer/';
   return new CustomRpcProvider(url, 196);
 }
