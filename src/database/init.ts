@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { logger } from '../utils/logger';
 
-const DB_PATH = process.env.DB_PATH || './data/eagle-swap.db';
+const DB_PATH = process.env.DB_PATH || './data/eagleswap.db';
 const BACKUP_PATH = process.env.DB_BACKUP_PATH || './data/backups';
 
 // Ensure directories exist
