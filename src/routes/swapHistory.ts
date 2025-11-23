@@ -20,7 +20,7 @@ router.get('/:userAddress',
   checkValidation,
   asyncHandler(async (req, res) => {
     const { userAddress } = req.params;
-    const chainId = parseInt(req.query.chainId as string) || 196;
+    const chainId = parseInt(req.query.chainId as string) || 0; // 0 = all chains
     const limit = parseInt(req.query.limit as string) || 50;
     const offset = parseInt(req.query.offset as string) || 0;
     const swapType = req.query.swapType as string | undefined;
