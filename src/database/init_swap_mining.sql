@@ -127,16 +127,38 @@ CREATE TABLE IF NOT EXISTS user_tiers (
     privilege_count INTEGER DEFAULT 3  -- 该等级有多少个特权（用于前端循环显示）
 );
 
--- 插入等级基础数据（翻译在前端处理）
+-- 插入 VIP 等级基础数据（基于累计交易量）
+-- 根据白皮书 Swap Mining 章节 - VIP 等级系统
 INSERT OR REPLACE INTO user_tiers (tier_name, tier_level, min_volume_usdt, multiplier, icon, privilege_count) VALUES
 ('Bronze', 1, 0, 1.0, '🥉', 3),
-('Silver', 2, 10000, 1.2, '🥈', 4),
-('Gold', 3, 50000, 1.5, '🥇', 4),
-('Platinum', 4, 200000, 2.0, '💎', 5),
-('Diamond', 5, 1000000, 3.0, '💠', 7);
+('Silver', 2, 1000, 1.2, '🥈', 4),
+('Gold', 3, 10000, 1.5, '🥇', 4),
+('Platinum', 4, 100000, 2.0, '💎', 5);
 
 -- ============================================
--- 9. 用户当前等级视图
+-- 9. NFT Access 加成表（持有 NFT 的固定加成）
+-- ============================================
+CREATE TABLE IF NOT EXISTS nft_level_bonus (
+    nft_level INTEGER PRIMARY KEY,
+    nft_tier_name TEXT NOT NULL,
+    bonus_multiplier REAL NOT NULL,
+    description TEXT
+);
+
+-- 插入 NFT 加成数据
+-- 根据白皮书 Swap Mining 章节 - NFT Access 加成系统
+INSERT OR REPLACE INTO nft_level_bonus (nft_level, nft_tier_name, bonus_multiplier, description) VALUES
+(0, 'None', 1.0, 'No NFT - 1.0x (100%)'),
+(1, 'Micro', 1.05, 'Micro Node - 1.05x (105%)'),
+(2, 'Mini', 1.20, 'Mini Node - 1.20x (120%)'),
+(3, 'Bronze', 1.35, 'Bronze Node - 1.35x (135%)'),
+(4, 'Silver', 1.50, 'Silver Node - 1.50x (150%)'),
+(5, 'Gold', 1.70, 'Gold Node - 1.70x (170%)'),
+(6, 'Platinum', 1.85, 'Platinum Node - 1.85x (185%)'),
+(7, 'Diamond', 2.50, 'Diamond Node - 2.50x (250%)');
+
+-- ============================================
+-- 10. 用户当前 VIP 等级视图
 -- ============================================
 CREATE VIEW IF NOT EXISTS user_current_tier AS
 SELECT 
@@ -145,17 +167,15 @@ SELECT
     COALESCE(s.total_volume_usdt, 0) as total_volume,
     COALESCE(s.total_eagle_earned, 0) as total_eagle,
     CASE 
-        WHEN COALESCE(s.total_volume_usdt, 0) >= 1000000 THEN 'Diamond'
-        WHEN COALESCE(s.total_volume_usdt, 0) >= 200000 THEN 'Platinum'
-        WHEN COALESCE(s.total_volume_usdt, 0) >= 50000 THEN 'Gold'
-        WHEN COALESCE(s.total_volume_usdt, 0) >= 10000 THEN 'Silver'
+        WHEN COALESCE(s.total_volume_usdt, 0) >= 100000 THEN 'Platinum'
+        WHEN COALESCE(s.total_volume_usdt, 0) >= 10000 THEN 'Gold'
+        WHEN COALESCE(s.total_volume_usdt, 0) >= 1000 THEN 'Silver'
         ELSE 'Bronze'
     END as tier_name,
     CASE 
-        WHEN COALESCE(s.total_volume_usdt, 0) >= 1000000 THEN 3.0
-        WHEN COALESCE(s.total_volume_usdt, 0) >= 200000 THEN 2.0
-        WHEN COALESCE(s.total_volume_usdt, 0) >= 50000 THEN 1.5
-        WHEN COALESCE(s.total_volume_usdt, 0) >= 10000 THEN 1.2
+        WHEN COALESCE(s.total_volume_usdt, 0) >= 100000 THEN 2.0
+        WHEN COALESCE(s.total_volume_usdt, 0) >= 10000 THEN 1.5
+        WHEN COALESCE(s.total_volume_usdt, 0) >= 1000 THEN 1.2
         ELSE 1.0
     END as multiplier
 FROM users u
