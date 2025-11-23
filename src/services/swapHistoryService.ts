@@ -116,9 +116,17 @@ export class SwapHistoryService {
       let query = `
         SELECT * FROM swap_transactions
         WHERE user_address = ?
-        ORDER BY timestamp DESC LIMIT ? OFFSET ?
       `;
-      const params: any[] = [userAddress.toLowerCase(), limit, offset];
+      const params: any[] = [userAddress.toLowerCase()];
+
+      // 如果指定了 chainId,则过滤特定链;否则返回所有链
+      if (chainId) {
+        query += ' AND chain_id = ?';
+        params.push(chainId);
+      }
+
+      query += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?';
+      params.push(limit, offset);
 
       const rows = db.prepare(query).all(...params);
       return rows as SwapTransaction[];
@@ -142,6 +150,12 @@ export class SwapHistoryService {
         WHERE user_address = ?
       `;
       const params: any[] = [userAddress.toLowerCase()];
+
+      // 如果指定了 chainId,则过滤特定链;否则统计所有链
+      if (chainId) {
+        query += ' AND chain_id = ?';
+        params.push(chainId);
+      }
 
       const row: any = db.prepare(query).get(...params);
       return row?.count || 0;
