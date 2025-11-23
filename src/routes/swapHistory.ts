@@ -13,7 +13,7 @@ const router = Router();
  */
 router.get('/:userAddress',
   param('userAddress').isEthereumAddress().withMessage('Invalid Ethereum address'),
-  query('chainId').optional().isInt({ min: 1 }).withMessage('Invalid chain ID'),
+  query('chainId').optional().isInt({ min: 0 }).withMessage('Invalid chain ID'), // 0 = all chains
   query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100'),
   query('offset').optional().isInt({ min: 0 }).withMessage('Offset must be non-negative'),
   query('swapType').optional().isIn(['instant', 'twap', 'limit']).withMessage('Invalid swap type'),
@@ -55,11 +55,11 @@ router.get('/:userAddress',
  */
 router.get('/:userAddress/stats',
   param('userAddress').isEthereumAddress().withMessage('Invalid Ethereum address'),
-  query('chainId').optional().isInt({ min: 1 }).withMessage('Invalid chain ID'),
+  query('chainId').optional().isInt({ min: 0 }).withMessage('Invalid chain ID'), // 0 = all chains
   checkValidation,
   asyncHandler(async (req, res) => {
     const { userAddress } = req.params;
-    const chainId = parseInt(req.query.chainId as string) || 196;
+    const chainId = parseInt(req.query.chainId as string) || 0; // 0 = all chains
 
     const stats = await swapHistoryService.getUserStats(userAddress, chainId);
 
