@@ -193,7 +193,40 @@ INSERT OR REPLACE INTO yearly_reward_multipliers (year, multiplier, decay_rate, 
 CREATE INDEX IF NOT EXISTS idx_yearly_multipliers_year ON yearly_reward_multipliers(year);
 
 -- ============================================
--- 7. SWAP 交易记录表
+-- 7. 年度奖励预计算表 (yearly_rewards)
+-- ============================================
+CREATE TABLE IF NOT EXISTS yearly_rewards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    year INTEGER NOT NULL,
+    level_id INTEGER NOT NULL,
+    stage INTEGER NOT NULL,
+    daily_reward REAL NOT NULL,
+    year_multiplier REAL NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (level_id) REFERENCES node_levels(id),
+    UNIQUE(year, level_id, stage)
+);
+
+-- 插入预计算的年度奖励数据 (10年 × 7等级 × 5阶段 = 350条记录)
+-- 公式: daily_reward = daily_reward_base × difficulty_multiplier × year_multiplier
+INSERT OR REPLACE INTO yearly_rewards (year, level_id, stage, daily_reward, year_multiplier)
+SELECT 
+    yrm.year,
+    nl.id as level_id,
+    nls.stage,
+    ROUND(nl.daily_reward_base * nls.difficulty_multiplier * yrm.multiplier, 4) as daily_reward,
+    yrm.multiplier as year_multiplier
+FROM node_levels nl
+CROSS JOIN node_level_stages nls ON nl.id = nls.level_id
+CROSS JOIN yearly_reward_multipliers yrm
+ORDER BY yrm.year, nl.id, nls.stage;
+
+CREATE INDEX IF NOT EXISTS idx_yearly_rewards_lookup ON yearly_rewards(year, level_id, stage);
+CREATE INDEX IF NOT EXISTS idx_yearly_rewards_year ON yearly_rewards(year);
+CREATE INDEX IF NOT EXISTS idx_yearly_rewards_level ON yearly_rewards(level_id);
+
+-- ============================================
+-- 8. SWAP 交易记录表
 -- ============================================
 CREATE TABLE IF NOT EXISTS swap_transactions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -216,7 +249,7 @@ CREATE INDEX IF NOT EXISTS idx_swap_tx_timestamp ON swap_transactions(timestamp)
 CREATE INDEX IF NOT EXISTS idx_swap_tx_hash ON swap_transactions(tx_hash);
 
 -- ============================================
--- 8. SWAP 挖矿配置表
+-- 9. SWAP 挖矿配置表
 -- ============================================
 CREATE TABLE IF NOT EXISTS swap_mining_config (
     id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -233,7 +266,7 @@ INSERT OR REPLACE INTO swap_mining_config (id, reward_rate, fee_rate, eagle_pric
 VALUES (1, 0.0003, 0.0015, 0.10, 1, 1, 10.0);
 
 -- ============================================
--- 9. SWAP 挖矿 NFT 加成日志表
+-- 10. SWAP 挖矿 NFT 加成日志表
 -- ============================================
 CREATE TABLE IF NOT EXISTS swap_mining_nft_bonus_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
