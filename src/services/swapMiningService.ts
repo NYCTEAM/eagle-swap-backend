@@ -39,7 +39,7 @@ export class SwapMiningService {
       if (config.nft_bonus_enabled) {
         // 查询用户的 NFT 总权重
         const userWeight = db.prepare(`
-          SELECT COALESCE(SUM(nl.power), 0) as total_weight
+          SELECT COALESCE(SUM(nl.weight), 0) as total_weight
           FROM nft_ownership n
           LEFT JOIN node_levels nl ON n.level_id = nl.id
           WHERE n.owner_address = ?
