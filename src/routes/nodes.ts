@@ -65,10 +65,10 @@ router.get('/tiers', async (req, res) => {
       
       // 获取对应的 Swap Mining 加成
       const swapBonus = db.prepare(`
-        SELECT bonus_percentage 
+        SELECT bonus_multiplier 
         FROM nft_level_bonus 
         WHERE nft_level = ?
-      `).get(level.id) as { bonus_percentage: number } | undefined;
+      `).get(level.id) as { bonus_multiplier: number } | undefined;
       
       // 计算当前阶段（每20%一个阶段）
       let currentStage = 1;
@@ -119,7 +119,7 @@ router.get('/tiers', async (req, res) => {
         total_supply: level.supply,
         available: available,
         hashpower: level.power,
-        swap_mining_boost: swapBonus?.bonus_percentage || 0,
+        swap_mining_boost: swapBonus?.bonus_multiplier || 0,
         description: `${level.emoji} ${level.name} tier - ${level.power}x mining power`,
         emoji: level.emoji,
         current_stage: currentStage,
