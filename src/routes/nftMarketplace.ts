@@ -23,7 +23,7 @@ router.get('/listings', async (req, res) => {
                     l.*,
                     n.level,
                     n.stage,
-                    n.power,
+                    n.weight,
                     nl.name as level_name,
                     nl.emoji as level_emoji
                 FROM nft_listings l
