@@ -112,26 +112,8 @@ INSERT OR REPLACE INTO swap_mining_config (id, reward_rate, fee_rate, eagle_pric
 VALUES (1, 0.00003, 0.001, 0.10, 1);
 
 -- ============================================
--- 7. 推荐奖励表（可选）
+-- 推荐系统已移除 (Referral system removed)
 -- ============================================
-CREATE TABLE IF NOT EXISTS referral_rewards (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    referrer_address TEXT NOT NULL,
-    referee_address TEXT NOT NULL,
-    reward_type TEXT NOT NULL,
-    reward_amount REAL NOT NULL,
-    source_tx_id INTEGER,
-    claimed BOOLEAN DEFAULT 0,
-    claimed_at DATETIME,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (referrer_address) REFERENCES users(wallet_address),
-    FOREIGN KEY (referee_address) REFERENCES users(wallet_address),
-    FOREIGN KEY (source_tx_id) REFERENCES swap_transactions(id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_referral_referrer ON referral_rewards(referrer_address);
-CREATE INDEX IF NOT EXISTS idx_referral_referee ON referral_rewards(referee_address);
-CREATE INDEX IF NOT EXISTS idx_referral_claimed ON referral_rewards(claimed);
 
 -- ============================================
 -- 8. 用户等级表（基于累计交易量）

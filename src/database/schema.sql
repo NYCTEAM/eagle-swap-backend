@@ -5,11 +5,8 @@
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     wallet_address TEXT UNIQUE NOT NULL,
-    referrer_id INTEGER,
-    referral_code TEXT UNIQUE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (referrer_id) REFERENCES users(id)
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 2. 节点表（缓存链上数据）
@@ -75,30 +72,7 @@ CREATE TABLE IF NOT EXISTS swap_rewards (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 6. 推荐关系表
-CREATE TABLE IF NOT EXISTS referral_relationships (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    referrer_address TEXT NOT NULL,       -- 推荐人
-    referee_address TEXT NOT NULL,        -- 被推荐人
-    referral_code TEXT,                   -- 推荐码
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(referee_address)
-);
-
--- 7. 推荐奖励表
-CREATE TABLE IF NOT EXISTS referral_rewards (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    referrer_address TEXT NOT NULL,
-    referee_address TEXT NOT NULL,
-    event_type TEXT NOT NULL,             -- 'node_purchase', 'swap_fee'
-    amount_usdt REAL NOT NULL,            -- 事件金额
-    commission_rate REAL NOT NULL,        -- 佣金比例 0.05-0.20
-    reward_amount REAL NOT NULL,          -- 奖励金额
-    claimed BOOLEAN DEFAULT 0,
-    claimed_at DATETIME,
-    tx_hash TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
+-- 推荐系统已移除 (Referral system removed)
 
 -- 8. 流动性挖矿表
 CREATE TABLE IF NOT EXISTS liquidity_mining (
@@ -134,7 +108,7 @@ CREATE TABLE IF NOT EXISTS system_config (
 
 -- 创建索引
 CREATE INDEX IF NOT EXISTS idx_users_wallet ON users(wallet_address);
-CREATE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code);
+
 
 CREATE INDEX IF NOT EXISTS idx_nodes_owner ON nodes(owner_address);
 CREATE INDEX IF NOT EXISTS idx_nodes_token ON nodes(token_id);
@@ -153,11 +127,7 @@ CREATE INDEX IF NOT EXISTS idx_swap_rewards_user ON swap_rewards(user_address);
 CREATE INDEX IF NOT EXISTS idx_swap_rewards_date ON swap_rewards(reward_date);
 CREATE INDEX IF NOT EXISTS idx_swap_rewards_claimed ON swap_rewards(claimed);
 
-CREATE INDEX IF NOT EXISTS idx_referral_referrer ON referral_relationships(referrer_address);
-CREATE INDEX IF NOT EXISTS idx_referral_referee ON referral_relationships(referee_address);
 
-CREATE INDEX IF NOT EXISTS idx_referral_rewards_referrer ON referral_rewards(referrer_address);
-CREATE INDEX IF NOT EXISTS idx_referral_rewards_claimed ON referral_rewards(claimed);
 
 CREATE INDEX IF NOT EXISTS idx_liquidity_user ON liquidity_mining(user_address);
 CREATE INDEX IF NOT EXISTS idx_liquidity_pool ON liquidity_mining(pool_address);
