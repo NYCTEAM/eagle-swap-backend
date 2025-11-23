@@ -54,7 +54,7 @@ router.get('/:address', async (req, res) => {
       safeQuery(`
         SELECT 
           COUNT(*) as total_nodes,
-          COALESCE(SUM(nl.power), 0) as total_power
+          COALESCE(SUM(nl.weight), 0) as total_power
         FROM nodes n
         LEFT JOIN node_levels nl ON n.level = nl.id
         WHERE n.owner_address = ?
