@@ -303,7 +303,7 @@ export class SwapHistoryService {
   }
 
   /**
-   * 更新用户统计
+   * 更新用户统计 (统计所有链的总和)
    */
   async updateUserStats(
     userAddress: string,
@@ -315,8 +315,8 @@ export class SwapHistoryService {
       const query = `
         INSERT INTO user_swap_stats (
           user_address, total_swaps, total_volume_usd, total_fees_paid_usd,
-          first_swap_at, last_swap_at, chain_id
-        ) VALUES (?, 1, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)
+          first_swap_at, last_swap_at
+        ) VALUES (?, 1, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ON CONFLICT(user_address) DO UPDATE SET
           total_swaps = total_swaps + 1,
           total_volume_usd = total_volume_usd + ?,
@@ -329,7 +329,6 @@ export class SwapHistoryService {
         userAddress.toLowerCase(),
         volumeUsd,
         feesPaidUsd,
-        chainId,
         volumeUsd,
         feesPaidUsd
       );
@@ -340,16 +339,16 @@ export class SwapHistoryService {
   }
 
   /**
-   * 获取用户统计
+   * 获取用户统计 (统计所有链的总和)
    */
   async getUserStats(userAddress: string, chainId: number): Promise<any> {
     try {
       const query = `
         SELECT * FROM user_swap_stats
-        WHERE user_address = ? AND chain_id = ?
+        WHERE user_address = ?
       `;
 
-      const row: any = db.prepare(query).get(userAddress.toLowerCase(), chainId);
+      const row: any = db.prepare(query).get(userAddress.toLowerCase());
       return row || null;
     } catch (err: any) {
       logger.error('Failed to get user stats', { error: err.message, userAddress });
