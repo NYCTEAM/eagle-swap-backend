@@ -17,30 +17,25 @@ const LEVEL_NAMES = ['Micro', 'Mini', 'Bronze', 'Silver', 'Gold', 'Platinum', 'D
 router.get('/listings', async (req, res) => {
     try {
         // 获取所有活跃的 NFT 挂单
-        const listings = await new Promise((resolve, reject) => {
-            db.all(`
-                SELECT 
-                    l.*,
-                    n.level,
-                    n.stage,
-                    n.weight,
-                    nl.name as level_name,
-                    nl.emoji as level_emoji
-                FROM nft_listings l
-                LEFT JOIN nodes n ON l.token_id = n.token_id
-                LEFT JOIN node_levels nl ON n.level = nl.id
-                WHERE l.status = 'active'
-                ORDER BY l.created_at DESC
-            `, [], (err: any, rows: any[]) => {
-                if (err) reject(err);
-                else resolve(rows || []);
-            });
-        });
+        const listings = db.prepare(`
+            SELECT 
+                l.*,
+                n.level,
+                n.stage,
+                n.weight,
+                nl.name as level_name,
+                nl.emoji as level_emoji
+            FROM nft_listings l
+            LEFT JOIN nodes n ON l.token_id = n.token_id
+            LEFT JOIN node_levels nl ON n.level = nl.id
+            WHERE l.status = 'active'
+            ORDER BY l.created_at DESC
+        `).all();
 
         res.json({
             success: true,
             data: listings,
-            count: (listings as any[]).length
+            count: listings.length
         });
     } catch (error) {
         console.error('Error fetching listings:', error);
