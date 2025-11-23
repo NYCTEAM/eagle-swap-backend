@@ -18,6 +18,8 @@ export class SwapMiningService {
     tradeValueUsdt: number;
     chainId: number;
     routeInfo?: string;
+    fromTokenSymbol?: string;
+    toTokenSymbol?: string;
   }) {
     try {
       console.log(`📝 记录 SWAP 交易: ${params.txHash}`);
@@ -77,8 +79,9 @@ export class SwapMiningService {
       const insertTx = db.prepare(`
         INSERT INTO swap_transactions 
         (tx_hash, user_address, from_token, to_token, from_amount, to_amount, 
-         trade_value_usdt, fee_usdt, eagle_reward, route_info, chain_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         trade_value_usdt, fee_usdt, eagle_reward, route_info, chain_id, 
+         from_token_symbol, to_token_symbol)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       
       insertTx.run(
@@ -92,7 +95,9 @@ export class SwapMiningService {
         feeUsdt,
         eagleReward,
         params.routeInfo || 'Direct swap',
-        params.chainId
+        params.chainId,
+        params.fromTokenSymbol || null,
+        params.toTokenSymbol || null
       );
       
       // 更新用户统计
