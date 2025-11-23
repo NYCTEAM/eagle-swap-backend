@@ -122,29 +122,30 @@ CREATE INDEX IF NOT EXISTS idx_node_stages_level ON node_level_stages(level_id);
 CREATE INDEX IF NOT EXISTS idx_node_stages_stage ON node_level_stages(stage);
 
 -- ============================================
--- 4. NFT 拥有权表
+-- 4. NFT 节点表 (nodes) - 用于所有路由和服务
 -- ============================================
-CREATE TABLE IF NOT EXISTS nft_ownership (
+CREATE TABLE IF NOT EXISTS nodes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     token_id INTEGER UNIQUE NOT NULL,
     owner_address TEXT NOT NULL,
-    level_id INTEGER NOT NULL,
+    level INTEGER NOT NULL,
     stage INTEGER NOT NULL,
-    purchase_price REAL NOT NULL,
     difficulty_multiplier REAL NOT NULL,
-    is_active BOOLEAN DEFAULT 1,
+    power REAL NOT NULL,
+    mint_time DATETIME NOT NULL,
+    tx_hash TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (level_id) REFERENCES node_levels(id)
+    FOREIGN KEY (level) REFERENCES node_levels(id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_nft_owner ON nft_ownership(owner_address);
-CREATE INDEX IF NOT EXISTS idx_nft_level ON nft_ownership(level_id);
-CREATE INDEX IF NOT EXISTS idx_nft_token ON nft_ownership(token_id);
+CREATE INDEX IF NOT EXISTS idx_nodes_owner ON nodes(owner_address);
+CREATE INDEX IF NOT EXISTS idx_nodes_level ON nodes(level);
+CREATE INDEX IF NOT EXISTS idx_nodes_token ON nodes(token_id);
 
 -- ============================================
 -- 5. NFT 挖矿奖励记录表
 -- ============================================
-CREATE TABLE IF NOT EXISTS nft_mining_rewards (
+CREATE TABLE IF NOT EXISTS node_mining_rewards (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     token_id INTEGER NOT NULL,
     owner_address TEXT NOT NULL,
@@ -156,14 +157,14 @@ CREATE TABLE IF NOT EXISTS nft_mining_rewards (
     claimed BOOLEAN DEFAULT 0,
     claimed_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (token_id) REFERENCES nft_ownership(token_id),
+    FOREIGN KEY (token_id) REFERENCES nodes(token_id),
     UNIQUE(token_id, reward_date)
 );
 
-CREATE INDEX IF NOT EXISTS idx_nft_rewards_token ON nft_mining_rewards(token_id);
-CREATE INDEX IF NOT EXISTS idx_nft_rewards_owner ON nft_mining_rewards(owner_address);
-CREATE INDEX IF NOT EXISTS idx_nft_rewards_date ON nft_mining_rewards(reward_date);
-CREATE INDEX IF NOT EXISTS idx_nft_rewards_claimed ON nft_mining_rewards(claimed);
+CREATE INDEX IF NOT EXISTS idx_node_rewards_token ON node_mining_rewards(token_id);
+CREATE INDEX IF NOT EXISTS idx_node_rewards_owner ON node_mining_rewards(owner_address);
+CREATE INDEX IF NOT EXISTS idx_node_rewards_date ON node_mining_rewards(reward_date);
+CREATE INDEX IF NOT EXISTS idx_node_rewards_claimed ON node_mining_rewards(claimed);
 
 -- ============================================
 -- 6. 年度奖励倍数表
