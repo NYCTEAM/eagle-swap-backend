@@ -190,11 +190,18 @@ export class SwapMiningService {
    */
   getUserStats(userAddress: string) {
     try {
-      // 用户基本统计
+      // 用户基本统计 - 从 swap_transactions 表实时计算
       let stats;
       try {
         stats = db.prepare(`
-          SELECT * FROM user_swap_stats WHERE user_address = ?
+          SELECT 
+            COUNT(*) as total_trades,
+            COALESCE(SUM(trade_value_usdt), 0) as total_volume_usdt,
+            COALESCE(SUM(fee_usdt), 0) as total_fee_paid,
+            COALESCE(SUM(eagle_reward), 0) as total_eagle_earned,
+            0 as total_eagle_claimed
+          FROM swap_transactions 
+          WHERE user_address = ?
         `).get(userAddress) as any;
       } catch (e) {
         stats = null;
