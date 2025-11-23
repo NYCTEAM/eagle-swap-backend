@@ -116,16 +116,9 @@ export class SwapHistoryService {
       let query = `
         SELECT * FROM swap_transactions
         WHERE user_address = ? AND chain_id = ?
+        ORDER BY timestamp DESC LIMIT ? OFFSET ?
       `;
-      const params: any[] = [userAddress.toLowerCase(), chainId];
-
-      if (swapType) {
-        query += ' AND swap_type = ?';
-        params.push(swapType);
-      }
-
-      query += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?';
-      params.push(limit, offset);
+      const params: any[] = [userAddress.toLowerCase(), chainId, limit, offset];
 
       const rows = db.prepare(query).all(...params);
       return rows as SwapTransaction[];
@@ -149,11 +142,6 @@ export class SwapHistoryService {
         WHERE user_address = ? AND chain_id = ?
       `;
       const params: any[] = [userAddress.toLowerCase(), chainId];
-
-      if (swapType) {
-        query += ' AND swap_type = ?';
-        params.push(swapType);
-      }
 
       const row: any = db.prepare(query).get(...params);
       return row?.count || 0;
