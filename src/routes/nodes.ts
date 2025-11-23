@@ -118,9 +118,10 @@ router.get('/tiers', async (req, res) => {
         base_daily_output: level.daily_reward, // 基础奖励（100%）
         total_supply: level.supply,
         available: available,
-        hashpower: level.power,
+        hashpower: level.weight,
+        weight: level.weight,
         swap_mining_boost: swapBonus?.bonus_multiplier || 0,
-        description: `${level.emoji} ${level.name} tier - ${level.power}x mining power`,
+        description: `${level.emoji} ${level.name} tier - ${level.weight}x mining weight`,
         emoji: level.emoji,
         current_stage: currentStage,
         stage_multiplier: stageMultiplier,
