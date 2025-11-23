@@ -190,6 +190,9 @@ export class SwapMiningService {
    */
   getUserStats(userAddress: string) {
     try {
+      // 标准化地址为小写
+      const normalizedAddress = userAddress.toLowerCase();
+      
       // 用户基本统计 - 从 swap_transactions 表实时计算
       let stats;
       try {
@@ -202,7 +205,7 @@ export class SwapMiningService {
             0 as total_eagle_claimed
           FROM swap_transactions 
           WHERE user_address = ?
-        `).get(userAddress) as any;
+        `).get(normalizedAddress) as any;
       } catch (e) {
         stats = null;
       }
@@ -214,7 +217,7 @@ export class SwapMiningService {
           SELECT COALESCE(SUM(trade_value_usdt), 0) as total_volume
           FROM swap_transactions
           WHERE user_address = ?
-        `).get(userAddress) as any;
+        `).get(normalizedAddress) as any;
         
         const cumulativeVolume = volumeData?.total_volume || 0;
         
@@ -250,7 +253,7 @@ export class SwapMiningService {
           SELECT COALESCE(SUM(eagle_earned), 0) as total
           FROM swap_mining_rewards 
           WHERE user_address = ? AND claimed = 0
-        `).get(userAddress) as any;
+        `).get(normalizedAddress) as any;
         pendingRewards = pending?.total || 0;
       } catch (e) {
         pendingRewards = 0;
@@ -264,7 +267,7 @@ export class SwapMiningService {
           FROM nft_ownership n
           LEFT JOIN node_levels nl ON n.level_id = nl.id
           WHERE n.owner_address = ?
-        `).all(userAddress) as any[];
+        `).all(normalizedAddress) as any[];
       } catch (e) {
         ownedNfts = [];
       }
