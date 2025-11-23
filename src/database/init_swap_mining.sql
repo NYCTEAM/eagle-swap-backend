@@ -119,7 +119,27 @@ VALUES (1, 0.00003, 0.0015, 0.10, 1, 1, 10.0);
 -- ============================================
 
 -- ============================================
--- 8. 用户等级表（基于累计交易量）
+-- 8. VIP 等级表（基于累计交易量）- 用于 swapMiningService.ts
+-- ============================================
+CREATE TABLE IF NOT EXISTS vip_levels (
+    vip_level INTEGER PRIMARY KEY,
+    vip_name TEXT NOT NULL,
+    min_volume_usdt REAL NOT NULL,
+    max_volume_usdt REAL,
+    boost_percentage REAL NOT NULL,
+    description TEXT
+);
+
+-- 插入 VIP 等级数据
+-- boost_percentage 是总倍数的百分比表示 (100% = 1.0x, 120% = 1.2x)
+INSERT OR REPLACE INTO vip_levels (vip_level, vip_name, min_volume_usdt, max_volume_usdt, boost_percentage, description) VALUES
+(0, 'Bronze', 0, 999.99, 100, 'Bronze VIP - 1.0x (100% base rate)'),
+(1, 'Silver', 1000, 9999.99, 120, 'Silver VIP - 1.2x (120% = +20% boost)'),
+(2, 'Gold', 10000, 99999.99, 150, 'Gold VIP - 1.5x (150% = +50% boost)'),
+(3, 'Platinum', 100000, NULL, 200, 'Platinum VIP - 2.0x (200% = +100% boost)');
+
+-- ============================================
+-- 9. 用户等级表（基于累计交易量）- 兼容旧代码
 -- ============================================
 CREATE TABLE IF NOT EXISTS user_tiers (
     tier_name TEXT PRIMARY KEY,
@@ -127,16 +147,15 @@ CREATE TABLE IF NOT EXISTS user_tiers (
     min_volume_usdt REAL NOT NULL,
     multiplier REAL NOT NULL DEFAULT 1.0,
     icon TEXT,
-    privilege_count INTEGER DEFAULT 3  -- 该等级有多少个特权（用于前端循环显示）
+    privilege_count INTEGER DEFAULT 3
 );
 
--- 插入 VIP 等级基础数据（基于累计交易量）
--- 根据白皮书 Swap Mining 章节 - VIP 等级系统
+-- 插入用户等级数据（与 vip_levels 保持一致）
 INSERT OR REPLACE INTO user_tiers (tier_name, tier_level, min_volume_usdt, multiplier, icon, privilege_count) VALUES
-('Bronze', 1, 0, 1.0, '🥉', 3),
-('Silver', 2, 1000, 1.2, '🥈', 4),
-('Gold', 3, 10000, 1.5, '🥇', 4),
-('Platinum', 4, 100000, 2.0, '💎', 5);
+('Bronze', 0, 0, 1.0, '🥉', 3),
+('Silver', 1, 1000, 1.2, '🥈', 4),
+('Gold', 2, 10000, 1.5, '🥇', 4),
+('Platinum', 3, 100000, 2.0, '💎', 5);
 
 -- ============================================
 -- 9. NFT Access 加成表（持有 NFT 的固定加成）
