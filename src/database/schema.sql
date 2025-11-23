@@ -47,15 +47,17 @@ CREATE TABLE IF NOT EXISTS node_mining_rewards (
 -- 4. SWAP 交易表
 CREATE TABLE IF NOT EXISTS swap_transactions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_address TEXT NOT NULL,
-    token_in TEXT NOT NULL,
-    token_out TEXT NOT NULL,
-    amount_in REAL NOT NULL,
-    amount_out REAL NOT NULL,
-    fee_usdt REAL NOT NULL,               -- 0.1% 手续费
-    tx_hash TEXT UNIQUE NOT NULL,
-    block_number INTEGER NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    tx_hash TEXT UNIQUE,
+    user_address TEXT,
+    from_token TEXT,
+    to_token TEXT,
+    from_amount REAL,
+    to_amount REAL,
+    trade_value_usdt REAL,
+    fee_usdt REAL,
+    eagle_reward REAL,
+    route_info TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 5. SWAP 奖励表
