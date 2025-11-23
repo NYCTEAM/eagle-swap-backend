@@ -108,11 +108,12 @@ CREATE TABLE IF NOT EXISTS swap_mining_config (
 );
 
 -- 插入默认配置
--- reward_rate: 0.00003 = 基础奖励率
+-- reward_rate: 0.0003 = 基础奖励率 (已提高10倍)
 -- fee_rate: 0.0015 = 0.15% 平台手续费
 -- nft_bonus_multiplier: 10.0 = NFT 加成倍数 (加成% = Power × 10)
+-- 交易 $1,000 USDT → 0.3 EAGLE (基础)
 INSERT OR REPLACE INTO swap_mining_config (id, reward_rate, fee_rate, eagle_price_usdt, enabled, nft_bonus_enabled, nft_bonus_multiplier) 
-VALUES (1, 0.00003, 0.0015, 0.10, 1, 1, 10.0);
+VALUES (1, 0.0003, 0.0015, 0.10, 1, 1, 10.0);
 
 -- ============================================
 -- 推荐系统已移除 (Referral system removed)
