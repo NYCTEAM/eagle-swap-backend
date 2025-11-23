@@ -17,11 +17,12 @@ router.post('/record', async (req, res) => {
       fromAmount,
       toAmount,
       tradeValueUsdt,
+      chainId,
       routeInfo
     } = req.body;
     
     // 验证必填字段
-    if (!txHash || !userAddress || !fromToken || !toToken || !tradeValueUsdt) {
+    if (!txHash || !userAddress || !fromToken || !toToken || !tradeValueUsdt || !chainId) {
       return res.status(400).json({
         success: false,
         error: 'Missing required fields'
@@ -36,6 +37,7 @@ router.post('/record', async (req, res) => {
       fromAmount,
       toAmount,
       tradeValueUsdt,
+      chainId,
       routeInfo
     });
     

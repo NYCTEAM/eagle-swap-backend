@@ -16,6 +16,7 @@ export class SwapMiningService {
     fromAmount: number;
     toAmount: number;
     tradeValueUsdt: number;
+    chainId: number;
     routeInfo?: string;
   }) {
     try {
@@ -74,8 +75,8 @@ export class SwapMiningService {
       const insertTx = db.prepare(`
         INSERT INTO swap_transactions 
         (tx_hash, user_address, from_token, to_token, from_amount, to_amount, 
-         trade_value_usdt, fee_usdt, eagle_reward, route_info)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         trade_value_usdt, fee_usdt, eagle_reward, route_info, chain_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       
       insertTx.run(
@@ -88,7 +89,8 @@ export class SwapMiningService {
         params.tradeValueUsdt,
         feeUsdt,
         eagleReward,
-        params.routeInfo || 'Direct swap'
+        params.routeInfo || 'Direct swap',
+        params.chainId
       );
       
       // 更新用户统计
