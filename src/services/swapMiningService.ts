@@ -21,6 +21,8 @@ export class SwapMiningService {
     fromTokenSymbol?: string;
     toTokenSymbol?: string;
     swapType?: 'instant' | 'twap' | 'limit';
+    fromTokenDecimals?: number;
+    toTokenDecimals?: number;
   }) {
     try {
       console.log(`📝 记录 SWAP 交易: ${params.txHash}`);
@@ -81,8 +83,8 @@ export class SwapMiningService {
         INSERT INTO swap_transactions 
         (tx_hash, user_address, from_token, to_token, from_amount, to_amount, 
          trade_value_usdt, fee_usdt, eagle_reward, route_info, chain_id, 
-         from_token_symbol, to_token_symbol, swap_type)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         from_token_symbol, to_token_symbol, swap_type, from_token_decimals, to_token_decimals)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       
       insertTx.run(
@@ -99,7 +101,9 @@ export class SwapMiningService {
         params.chainId,
         params.fromTokenSymbol || null,
         params.toTokenSymbol || null,
-        params.swapType || 'instant'
+        params.swapType || 'instant',
+        params.fromTokenDecimals || 18,
+        params.toTokenDecimals || 18
       );
       
       // 更新用户统计
