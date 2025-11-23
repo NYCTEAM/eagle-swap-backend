@@ -246,17 +246,27 @@ export class SwapMiningService {
         };
       }
       
-      // 待领取奖励
+      // 待领取奖励 - 直接从 swap_transactions 计算
+      // 因为奖励已经在交易时计算并保存,所有未领取的奖励就是 total_eagle_earned - total_eagle_claimed
       let pendingRewards = 0;
       try {
+        // 方案1: 从 swap_mining_rewards 表查询(如果有记录)
         const pending = db.prepare(`
           SELECT COALESCE(SUM(eagle_earned), 0) as total
           FROM swap_mining_rewards 
           WHERE user_address = ? AND claimed = 0
         `).get(normalizedAddress) as any;
-        pendingRewards = pending?.total || 0;
+        
+        // 方案2: 如果 swap_mining_rewards 表为空,直接使用 total_eagle_earned
+        if (pending?.total > 0) {
+          pendingRewards = pending.total;
+        } else {
+          // 所有已获得的奖励都是待领取的(因为 total_eagle_claimed = 0)
+          pendingRewards = stats?.total_eagle_earned || 0;
+        }
       } catch (e) {
-        pendingRewards = 0;
+        // 出错时使用 total_eagle_earned 作为待领取奖励
+        pendingRewards = stats?.total_eagle_earned || 0;
       }
       
       // 获取用户拥有的 NFT 数量
