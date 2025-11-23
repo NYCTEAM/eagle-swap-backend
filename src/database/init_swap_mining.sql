@@ -98,18 +98,21 @@ CREATE INDEX IF NOT EXISTS idx_daily_stats_date ON daily_swap_stats(stat_date);
 -- ============================================
 CREATE TABLE IF NOT EXISTS swap_mining_config (
     id INTEGER PRIMARY KEY CHECK (id = 1),
-    reward_rate REAL NOT NULL DEFAULT 0.0003,
-    fee_rate REAL NOT NULL DEFAULT 0.001,
+    reward_rate REAL NOT NULL DEFAULT 0.00003,
+    fee_rate REAL NOT NULL DEFAULT 0.0015,
     eagle_price_usdt REAL NOT NULL DEFAULT 0.10,
     enabled BOOLEAN DEFAULT 1,
+    nft_bonus_enabled BOOLEAN DEFAULT 1,
+    nft_bonus_multiplier REAL DEFAULT 10.0,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 插入默认配置
--- reward_rate: 0.00003 = 0.003 EAGLE per 100 USDT (0.003 / 100)
--- fee_rate: 0.001 = 0.1% platform fee
-INSERT OR REPLACE INTO swap_mining_config (id, reward_rate, fee_rate, eagle_price_usdt, enabled) 
-VALUES (1, 0.00003, 0.001, 0.10, 1);
+-- reward_rate: 0.00003 = 基础奖励率
+-- fee_rate: 0.0015 = 0.15% 平台手续费
+-- nft_bonus_multiplier: 10.0 = NFT 加成倍数 (加成% = Power × 10)
+INSERT OR REPLACE INTO swap_mining_config (id, reward_rate, fee_rate, eagle_price_usdt, enabled, nft_bonus_enabled, nft_bonus_multiplier) 
+VALUES (1, 0.00003, 0.0015, 0.10, 1, 1, 10.0);
 
 -- ============================================
 -- 推荐系统已移除 (Referral system removed)
@@ -146,16 +149,17 @@ CREATE TABLE IF NOT EXISTS nft_level_bonus (
 );
 
 -- 插入 NFT 加成数据
--- 根据白皮书 Swap Mining 章节 - NFT Access 加成系统
+-- 根据实际代码实现: 加成% = Power × 10, 总倍数 = 1 + (加成% / 100)
+-- 此配置与 swapMiningService.ts 的计算逻辑一致
 INSERT OR REPLACE INTO nft_level_bonus (nft_level, nft_tier_name, bonus_multiplier, description) VALUES
 (0, 'None', 1.0, 'No NFT - 1.0x (100%)'),
-(1, 'Micro', 1.05, 'Micro Node - 1.05x (105%)'),
-(2, 'Mini', 1.20, 'Mini Node - 1.20x (120%)'),
-(3, 'Bronze', 1.35, 'Bronze Node - 1.35x (135%)'),
-(4, 'Silver', 1.50, 'Silver Node - 1.50x (150%)'),
-(5, 'Gold', 1.70, 'Gold Node - 1.70x (170%)'),
-(6, 'Platinum', 1.85, 'Platinum Node - 1.85x (185%)'),
-(7, 'Diamond', 2.50, 'Diamond Node - 2.50x (250%)');
+(1, 'Micro', 1.01, 'Micro Node (Power 0.1) - 1.01x (101% = 100% + 1%)'),
+(2, 'Mini', 1.03, 'Mini Node (Power 0.3) - 1.03x (103% = 100% + 3%)'),
+(3, 'Bronze', 1.05, 'Bronze Node (Power 0.5) - 1.05x (105% = 100% + 5%)'),
+(4, 'Silver', 1.10, 'Silver Node (Power 1.0) - 1.10x (110% = 100% + 10%)'),
+(5, 'Gold', 1.30, 'Gold Node (Power 3.0) - 1.30x (130% = 100% + 30%)'),
+(6, 'Platinum', 1.70, 'Platinum Node (Power 7.0) - 1.70x (170% = 100% + 70%)'),
+(7, 'Diamond', 2.50, 'Diamond Node (Power 15.0) - 2.50x (250% = 100% + 150%)');
 
 -- ============================================
 -- 10. 用户当前 VIP 等级视图
