@@ -115,10 +115,10 @@ export class SwapHistoryService {
     try {
       let query = `
         SELECT * FROM swap_transactions
-        WHERE user_address = ? AND chain_id = ?
+        WHERE user_address = ?
         ORDER BY timestamp DESC LIMIT ? OFFSET ?
       `;
-      const params: any[] = [userAddress.toLowerCase(), chainId, limit, offset];
+      const params: any[] = [userAddress.toLowerCase(), limit, offset];
 
       const rows = db.prepare(query).all(...params);
       return rows as SwapTransaction[];
@@ -139,9 +139,9 @@ export class SwapHistoryService {
     try {
       let query = `
         SELECT COUNT(*) as count FROM swap_transactions
-        WHERE user_address = ? AND chain_id = ?
+        WHERE user_address = ?
       `;
-      const params: any[] = [userAddress.toLowerCase(), chainId];
+      const params: any[] = [userAddress.toLowerCase()];
 
       const row: any = db.prepare(query).get(...params);
       return row?.count || 0;
