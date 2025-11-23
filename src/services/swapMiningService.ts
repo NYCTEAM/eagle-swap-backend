@@ -518,9 +518,9 @@ export class SwapMiningService {
       const totalBoost = currentVip.boost_percentage + nftBoost;
 
       // 6. 获取基础配置
-      const config = db.prepare('SELECT base_rate, base_amount_usdt FROM swap_mining_config WHERE id = 1').get() as any;
-      const baseRate = config?.base_rate || 0.003;
-      const baseAmount = config?.base_amount_usdt || 100;
+      const config = db.prepare('SELECT reward_rate FROM swap_mining_config WHERE id = 1').get() as any;
+      const baseRate = config?.reward_rate || 0.0003;
+      const baseAmount = 100; // 固定基准金额
 
       // 7. 获取用户总收益
       const rewardData = db.prepare(`
