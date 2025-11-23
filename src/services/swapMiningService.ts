@@ -70,6 +70,9 @@ export class SwapMiningService {
         }
       }
       
+      // 确保用户存在
+      db.prepare('INSERT OR IGNORE INTO users (wallet_address) VALUES (?)').run(params.userAddress.toLowerCase());
+      
       // 插入交易记录
       const insertTx = db.prepare(`
         INSERT INTO swap_transactions 
@@ -80,7 +83,7 @@ export class SwapMiningService {
       
       insertTx.run(
         params.txHash,
-        params.userAddress,
+        params.userAddress.toLowerCase(),
         params.fromToken,
         params.toToken,
         params.fromAmount,
