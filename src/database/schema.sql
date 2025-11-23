@@ -142,7 +142,10 @@ INSERT OR IGNORE INTO system_config (key, value, description) VALUES
 ('node_nft_address', '', '节点 NFT 合约地址'),
 ('node_mining_address', '', '节点挖矿合约地址'),
 ('last_synced_block', '0', '最后同步的区块号'),
-('daily_mining_pool', '1095890', '每日挖矿奖励池（第1年）- 400M EAGLE / 365天'),
-('max_daily_pool', '57345', '理论最大每日奖励池 - 13,900个NFT全部售出且在阶段1'),
+('daily_mining_pool', '57345', '每日NFT挖矿奖励池（第1年阶段1）- 13,900个NFT全部售出'),
+('yearly_mining_pool', '20930925', '年度NFT挖矿奖励池（第1年）- 57,345 × 365天'),
+('min_daily_pool', '34407', '最小每日奖励池 - 所有NFT在阶段5（60-80%奖励）'),
 ('total_nft_supply', '13900', 'NFT总供应量'),
+('nft_mining_allocation', '400000000', 'NFT Mining总分配量 - 400M EAGLE（15年衰减）'),
+('swap_mining_allocation', '300000000', 'Swap Mining总分配量 - 300M EAGLE（固定费率）'),
 ('eagle_price_usdt', '0.10', 'EAGLE 当前价格（USDT）');
