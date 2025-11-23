@@ -243,8 +243,8 @@ router.get(['/my-nodes/:address', '/user/:address'], async (req, res) => {
     const nodes = db.prepare(`
       SELECT 
         n.*,
-        COALESCE(SUM(r.reward_amount), 0) as total_rewards,
-        COALESCE(SUM(CASE WHEN r.claimed = 0 THEN r.reward_amount ELSE 0 END), 0) as pending_rewards
+        COALESCE(SUM(r.final_reward), 0) as total_rewards,
+        COALESCE(SUM(CASE WHEN r.claimed = 0 THEN r.final_reward ELSE 0 END), 0) as pending_rewards
       FROM nodes n
       LEFT JOIN node_mining_rewards r ON n.token_id = r.token_id
       WHERE n.owner_address = ?
@@ -304,8 +304,8 @@ router.get('/:tokenId', async (req, res) => {
     const rewardStats = db.prepare(`
       SELECT 
         COUNT(*) as reward_count,
-        COALESCE(SUM(reward_amount), 0) as total_rewards,
-        COALESCE(SUM(CASE WHEN claimed = 0 THEN reward_amount ELSE 0 END), 0) as pending_rewards
+        COALESCE(SUM(final_reward), 0) as total_rewards,
+        COALESCE(SUM(CASE WHEN claimed = 0 THEN final_reward ELSE 0 END), 0) as pending_rewards
       FROM node_mining_rewards
       WHERE token_id = ?
     `).get(tokenId);
@@ -381,12 +381,12 @@ router.get('/leaderboard', async (req, res) => {
       SELECT 
         owner_address,
         COUNT(*) as node_count,
-        SUM(power) as total_power,
-        COALESCE(SUM(r.reward_amount), 0) as total_rewards
+        SUM(weight) as total_weight,
+        COALESCE(SUM(r.final_reward), 0) as total_rewards
       FROM nodes n
       LEFT JOIN node_mining_rewards r ON n.token_id = r.token_id
       GROUP BY owner_address
-      ORDER BY total_power DESC, node_count DESC
+      ORDER BY total_weight DESC, node_count DESC
       LIMIT ?
     `).all(limit);
     
