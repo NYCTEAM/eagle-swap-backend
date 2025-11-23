@@ -349,13 +349,29 @@ export class SwapHistoryService {
    */
   async getUserStats(userAddress: string, chainId: number): Promise<any> {
     try {
+      // 从 swap_transactions 表实时计算统计数据
       const query = `
-        SELECT * FROM user_swap_stats
+        SELECT 
+          COUNT(*) as total_trades,
+          COALESCE(SUM(trade_value_usdt), 0) as total_volume_usdt,
+          COALESCE(SUM(fee_usdt), 0) as total_fee_paid,
+          COALESCE(SUM(eagle_reward), 0) as total_eagle_earned,
+          MIN(timestamp) as first_trade_at,
+          MAX(timestamp) as last_trade_at
+        FROM swap_transactions
         WHERE user_address = ?
       `;
 
       const row: any = db.prepare(query).get(userAddress.toLowerCase());
-      return row || null;
+      
+      return row || {
+        total_trades: 0,
+        total_volume_usdt: 0,
+        total_fee_paid: 0,
+        total_eagle_earned: 0,
+        first_trade_at: null,
+        last_trade_at: null
+      };
     } catch (err: any) {
       logger.error('Failed to get user stats', { error: err.message, userAddress });
       throw err;
