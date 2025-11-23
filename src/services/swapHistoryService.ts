@@ -125,6 +125,12 @@ export class SwapHistoryService {
         params.push(chainId);
       }
 
+      // 如果指定了 swapType,则过滤特定类型
+      if (swapType) {
+        query += ' AND swap_type = ?';
+        params.push(swapType);
+      }
+
       query += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?';
       params.push(limit, offset);
 
