@@ -3,16 +3,46 @@ import { db } from '../database';
 
 const router = Router();
 
-// 节点等级配置（基于实际数据库配置）
-const NODE_LEVELS = [
-  { id: 1, name: 'Micro', price: 10, supply: 5000, power: 0.1, daily_reward: 0.27, emoji: '🪙' },
-  { id: 2, name: 'Mini', price: 25, supply: 3000, power: 0.3, daily_reward: 0.82, emoji: '⚪' },
-  { id: 3, name: 'Bronze', price: 50, supply: 2000, power: 0.5, daily_reward: 1.36, emoji: '🥉' },
-  { id: 4, name: 'Silver', price: 100, supply: 1500, power: 1, daily_reward: 2.72, emoji: '🥈' },
-  { id: 5, name: 'Gold', price: 250, supply: 1100, power: 3, daily_reward: 8.15, emoji: '🥇' },
-  { id: 6, name: 'Platinum', price: 500, supply: 700, power: 7, daily_reward: 19.02, emoji: '💎' },
-  { id: 7, name: 'Diamond', price: 1000, supply: 600, power: 15, daily_reward: 40.76, emoji: '💠' },
-];
+// 从数据库获取节点等级配置
+const getNodeLevels = () => {
+  try {
+    const levels = db.prepare(`
+      SELECT 
+        id,
+        name,
+        emoji,
+        price_usdt as price,
+        weight,
+        max_supply as supply,
+        minted,
+        daily_reward_base as daily_reward
+      FROM node_levels
+      ORDER BY id
+    `).all() as Array<{
+      id: number;
+      name: string;
+      emoji: string;
+      price: number;
+      weight: number;
+      supply: number;
+      minted: number;
+      daily_reward: number;
+    }>;
+    return levels;
+  } catch (error) {
+    console.error('Error fetching node levels:', error);
+    // 返回默认配置作为后备
+    return [
+      { id: 1, name: 'Micro Node', price: 10, supply: 5000, weight: 0.1, daily_reward: 0.27, emoji: '🪙', minted: 0 },
+      { id: 2, name: 'Mini Node', price: 25, supply: 3000, weight: 0.3, daily_reward: 0.82, emoji: '⚪', minted: 0 },
+      { id: 3, name: 'Bronze Node', price: 50, supply: 2000, weight: 0.5, daily_reward: 1.36, emoji: '🥉', minted: 0 },
+      { id: 4, name: 'Silver Node', price: 100, supply: 1500, weight: 1, daily_reward: 2.72, emoji: '🥈', minted: 0 },
+      { id: 5, name: 'Gold Node', price: 250, supply: 1100, weight: 3, daily_reward: 8.15, emoji: '🥇', minted: 0 },
+      { id: 6, name: 'Platinum Node', price: 500, supply: 700, weight: 7, daily_reward: 19.02, emoji: '💎', minted: 0 },
+      { id: 7, name: 'Diamond Node', price: 1000, supply: 600, weight: 15, daily_reward: 40.76, emoji: '💠', minted: 0 },
+    ];
+  }
+};
 
 /**
  * GET /api/nodes/tiers
@@ -20,7 +50,8 @@ const NODE_LEVELS = [
  */
 router.get('/tiers', async (req, res) => {
   try {
-    const tiersWithStatus = NODE_LEVELS.map(level => {
+    const NODE_LEVELS = getNodeLevels();
+    const tiersWithStatus = NODE_LEVELS.map((level: any) => {
       // 查询已售数量
       const result = db.prepare(`
         SELECT COUNT(*) as minted 
@@ -117,7 +148,8 @@ router.get('/tiers', async (req, res) => {
  */
 router.get('/levels', async (req, res) => {
   try {
-    const levelsWithStatus = NODE_LEVELS.map(level => {
+    const NODE_LEVELS = getNodeLevels();
+    const levelsWithStatus = NODE_LEVELS.map((level: any) => {
       // 查询已售数量
       const result = db.prepare(`
         SELECT COUNT(*) as minted 
@@ -220,13 +252,14 @@ router.get(['/my-nodes/:address', '/user/:address'], async (req, res) => {
     `).all(address.toLowerCase());
     
     // 添加节点等级信息
+    const NODE_LEVELS = getNodeLevels();
     const nodesWithInfo = nodes.map((node: any) => {
-      const levelInfo = NODE_LEVELS.find(l => l.id === node.level);
+      const levelInfo = NODE_LEVELS.find((l: any) => l.id === node.level);
       return {
         ...node,
         levelName: levelInfo?.name,
         levelEmoji: levelInfo?.emoji,
-        power: levelInfo?.power,
+        weight: levelInfo?.weight,
       };
     });
     
@@ -263,7 +296,8 @@ router.get('/:tokenId', async (req, res) => {
     }
     
     // 添加节点等级信息
-    const levelInfo = NODE_LEVELS.find(l => l.id === (node as any).level);
+    const NODE_LEVELS = getNodeLevels();
+    const levelInfo = NODE_LEVELS.find((l: any) => l.id === (node as any).level);
     
     // 查询奖励统计
     const rewardStats = db.prepare(`
@@ -281,7 +315,7 @@ router.get('/:tokenId', async (req, res) => {
         ...node,
         levelName: levelInfo?.name,
         levelEmoji: levelInfo?.emoji,
-        power: levelInfo?.power,
+        weight: levelInfo?.weight,
         ...rewardStats,
       },
     });
