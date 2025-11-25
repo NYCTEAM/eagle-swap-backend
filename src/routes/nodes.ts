@@ -424,6 +424,11 @@ router.get('/user/:address', async (req, res) => {
     const { simpleNftSync } = await import('../services/simpleNftSync');
     const userNFTs = simpleNftSync.getUserNFTs(address);
     
+    console.log(`🔍 [Nodes User API] Address: ${address}, NFTs found: ${userNFTs.length}`);
+    if (userNFTs.length > 0) {
+      console.log(`📝 [Nodes User API] First NFT:`, userNFTs[0]);
+    }
+    
     // 转换为前端期望的格式（兼容Manage页面）
     const nodes = userNFTs.map((nft: any) => ({
       token_id: nft.token_id,

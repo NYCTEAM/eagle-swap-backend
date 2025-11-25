@@ -269,6 +269,9 @@ class SimpleNFTSync {
 
   // 获取用户NFT列表
   getUserNFTs(address: string) {
+    const normalizedAddress = address.toLowerCase();
+    console.log(`🔍 [getUserNFTs] Querying for address: ${normalizedAddress}`);
+    
     const stmt = db.prepare(`
       SELECT n.*, i.name, i.price_usdt
       FROM user_nfts n
@@ -277,7 +280,10 @@ class SimpleNFTSync {
       ORDER BY n.token_id DESC
     `);
 
-    return stmt.all(address.toLowerCase());
+    const results = stmt.all(normalizedAddress);
+    console.log(`📊 [getUserNFTs] Found ${results.length} NFTs in database`);
+    
+    return results;
   }
 
   // 获取NFT库存信息
