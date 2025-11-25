@@ -230,7 +230,9 @@ class SimpleNFTSync {
     
     try {
       const currentBlock = await this.provider.getBlockNumber();
-      const scanBlocks = 50000; // 扫描最近50,000个区块
+      // 恢复到 10万 区块 (覆盖最近几天的交易，兼顾启动速度)
+      // 如果需要找回更早的 NFT，请手动增大此值或配置持久化存储
+      const scanBlocks = 100000; 
       const fromBlock = Math.max(currentBlock - scanBlocks, 0);
       
       console.log(`📊 Scanning from block ${fromBlock.toLocaleString()} to ${currentBlock.toLocaleString()}`);
