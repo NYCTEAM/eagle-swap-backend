@@ -106,7 +106,9 @@ router.get('/user/:address', (req, res) => {
       weight: nft.weight,
       minted_at: nft.minted_at,
       payment_method: nft.payment_method,
-      created_at: nft.created_at
+      created_at: nft.created_at,
+      is_listed: nft.is_listed === 1, // 转换为布尔值
+      listing_price: nft.listing_price || 0
     }));
 
     // 计算总权重
