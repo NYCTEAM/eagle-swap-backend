@@ -43,12 +43,12 @@ export class SwapMiningService {
       let bonusAmount = 0;
       
       if (config.nft_bonus_enabled) {
-        // 查询用户的 NFT 总权重
+        // 查询用户的 NFT 总权重 (从 user_nfts 表)
         const userWeight = db.prepare(`
-          SELECT COALESCE(SUM(n.weight), 0) as total_weight
-          FROM nodes n
-          WHERE n.owner_address = ?
-        `).get(params.userAddress) as any;
+          SELECT COALESCE(SUM(weight), 0) as total_weight
+          FROM user_nfts
+          WHERE owner_address = ?
+        `).get(params.userAddress.toLowerCase()) as any;
         
         if (userWeight && userWeight.total_weight > 0) {
           nftWeight = userWeight.total_weight;
@@ -273,9 +273,9 @@ export class SwapMiningService {
       let ownedNfts = [];
       try {
         ownedNfts = db.prepare(`
-          SELECT n.*, nl.level_name, nl.power
-          FROM nft_ownership n
-          LEFT JOIN node_levels nl ON n.level_id = nl.id
+          SELECT n.*, i.name as level_name, i.weight as power
+          FROM user_nfts n
+          LEFT JOIN nft_inventory i ON n.level = i.level
           WHERE n.owner_address = ?
         `).all(normalizedAddress) as any[];
       } catch (e) {
@@ -283,8 +283,19 @@ export class SwapMiningService {
       }
       
       // 计算总加成
-      const nftBoost = ownedNfts.reduce((sum, nft) => sum + (nft.power || 0), 0);
-      const combinedBoost = tier.boost_percentage + nftBoost;
+      const nftBoost = ownedNfts.reduce((sum, nft) => sum + (nft.weight || 0) * 10, 0); // 假设权重*10是百分比，或者需要读取配置
+      // 注意：这里应该与 recordSwap 保持一致。recordSwap 是 weight * config.nft_bonus_multiplier
+      // 让我们获取配置来计算准确的 boost
+      
+      let config;
+      try {
+        config = db.prepare('SELECT * FROM swap_mining_config WHERE id = 1').get() as any;
+      } catch (e) {
+        config = { nft_bonus_multiplier: 10 }; // 默认值
+      }
+      
+      const actualNftBoost = ownedNfts.reduce((sum, nft) => sum + (nft.weight || 0), 0) * (config?.nft_bonus_multiplier || 10);
+      const combinedBoost = tier.boost_percentage + actualNftBoost;
       
       return {
         success: true,
@@ -298,7 +309,7 @@ export class SwapMiningService {
           pending_rewards: pendingRewards,
           current_vip_level: tier.vip_level,
           vip_boost: tier.boost_percentage,
-          nft_boost: nftBoost,
+          nft_boost: actualNftBoost,
           combined_boost: combinedBoost,
           owned_nfts: ownedNfts,
           tier: tier
@@ -525,27 +536,55 @@ export class SwapMiningService {
         WHERE vip_level = ?
       `).get(currentVip.vip_level + 1) as any;
 
-      // 4. 获取用户持有的最高等级 NFT
+      // 4. 获取用户 NFT 数据 (从 user_nfts 表)
       let nftData = null;
+      let nftBoost = 0;
+      let nftLevel = 0;
+      let tierName = 'None';
+
       try {
-        nftData = db.prepare(`
+        const normalizedAddr = userAddress.toLowerCase();
+        
+        // 获取最高等级的 NFT 用于显示
+        const topNft = db.prepare(`
           SELECT 
-            unh.nft_level,
-            nb.tier_name,
-            nb.bonus_percentage as nft_boost
-          FROM user_nft_holdings unh
-          LEFT JOIN nft_level_bonus nb ON nb.nft_level = unh.nft_level
-          WHERE unh.user_address = ?
-          ORDER BY unh.nft_level DESC
+            n.level,
+            i.name as level_name
+          FROM user_nfts n
+          LEFT JOIN nft_inventory i ON n.level = i.level
+          WHERE n.owner_address = ?
+          ORDER BY n.level DESC
           LIMIT 1
-        `).get(userAddress) as any;
+        `).get(normalizedAddr) as any;
+
+        // 计算总权重
+        const weightData = db.prepare(`
+          SELECT COALESCE(SUM(weight), 0) as total_weight
+          FROM user_nfts
+          WHERE owner_address = ?
+        `).get(normalizedAddr) as any;
+        
+        // 获取配置
+        const config = db.prepare('SELECT * FROM swap_mining_config WHERE id = 1').get() as any;
+        const multiplier = config?.nft_bonus_multiplier || 10;
+        
+        const totalWeight = weightData?.total_weight || 0;
+        nftBoost = totalWeight * multiplier;
+        
+        if (topNft) {
+          nftLevel = topNft.level;
+          tierName = topNft.level_name || `Level ${topNft.level}`;
+        }
+        
+        nftData = {
+          nft_level: nftLevel,
+          tier_name: tierName,
+          nft_boost: nftBoost
+        };
+        
       } catch (error: any) {
-        // user_nft_holdings 表可能不存在，使用默认值
         console.log('⚠️ NFT 数据查询失败，使用默认值:', error?.message || error);
       }
-
-      const nftBoost = nftData?.nft_boost || 0;
-      const nftLevel = nftData?.nft_level || 0;
 
       // 5. 计算总加成 (VIP加成 + NFT额外加成)
       const totalBoost = currentVip.boost_percentage + nftBoost;
