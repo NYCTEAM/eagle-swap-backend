@@ -72,14 +72,27 @@ router.get('/stats/:address', (req, res) => {
 /**
  * 获取用户统计（带 chainId 参数）
  * GET /api/swap-mining/user-stats/:address
+ * 
+ * 🔄 已更新：包含用户NFT数据
  */
-router.get('/user-stats/:address', (req, res) => {
+router.get('/user-stats/:address', async (req, res) => {
   try {
     const { address } = req.params;
     const chainId = req.query.chainId ? parseInt(req.query.chainId as string) : undefined;
     
     // 获取用户统计数据
     const result = swapMiningService.getUserStats(address);
+    
+    // 获取用户NFT数据
+    const { simpleNftSync } = await import('../services/simpleNftSync');
+    const userNFTs = simpleNftSync.getUserNFTs(address);
+    
+    // 添加NFT数据到响应中
+    if (result.success && result.data) {
+      result.data.owned_nfts = userNFTs;
+      result.data.nft_count = userNFTs.length;
+      result.data.total_nft_weight = userNFTs.reduce((sum: number, nft: any) => sum + (nft.weight || 0), 0);
+    }
     
     res.json(result);
   } catch (error: any) {

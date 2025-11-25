@@ -403,4 +403,54 @@ router.get('/leaderboard', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/nodes/user/:address
+ * 获取用户拥有的NFT节点
+ * 
+ * 🔄 已更新：从简化NFT同步服务读取实时数据
+ */
+router.get('/user/:address', async (req, res) => {
+  try {
+    const { address } = req.params;
+    
+    if (!address) {
+      return res.status(400).json({
+        success: false,
+        error: 'Address is required'
+      });
+    }
+
+    // 从简化NFT同步服务获取用户NFT数据
+    const { simpleNftSync } = await import('../services/simpleNftSync');
+    const userNFTs = simpleNftSync.getUserNFTs(address);
+    
+    // 转换为前端期望的格式（兼容Manage页面）
+    const nodes = userNFTs.map((nft: any) => ({
+      token_id: nft.token_id,
+      level: nft.level,
+      level_name: nft.name,
+      power: nft.weight,
+      stage: 1, // 默认阶段
+      difficulty_multiplier: 1.0, // 默认难度倍数
+      purchase_time: nft.minted_at,
+      total_earned: 0, // NFT挖矿奖励暂未实现
+      pending_rewards: 0, // NFT挖矿奖励暂未实现
+      owner_address: nft.owner_address,
+      payment_method: nft.payment_method,
+      price_usdt: nft.price_usdt
+    }));
+
+    res.json({
+      success: true,
+      data: nodes
+    });
+  } catch (error: any) {
+    console.error('❌ Error fetching user nodes:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch user nodes'
+    });
+  }
+});
+
 export default router;
