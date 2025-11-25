@@ -80,7 +80,10 @@ class SimpleNFTSync {
       // 1. 同步NFT等级信息
       await this.syncLevels();
 
-      // 2. 监听新的NFT铸造事件
+      // 2. 扫描历史NFT事件 (重要：找到用户已购买的NFT)
+      await this.scanHistoricalEvents();
+
+      // 3. 监听新的NFT铸造事件
       this.contract.on('NFTMinted', async (to, tokenId, level, weight, paymentMethod, event) => {
         console.log(`🎉 NFT Minted: #${tokenId} to ${to}, Level ${level}`);
         await this.handleMintEvent(to, tokenId, level, weight, paymentMethod, event);
@@ -124,6 +127,66 @@ class SimpleNFTSync {
       } catch (error) {
         console.error(`❌ Error syncing level ${level}:`, error);
       }
+    }
+  }
+
+  // 扫描历史NFT事件 - 找到已存在的NFT购买记录
+  private async scanHistoricalEvents() {
+    console.log('🔍 Scanning historical NFT events...');
+    
+    try {
+      const currentBlock = await this.provider.getBlockNumber();
+      const scanBlocks = 50000; // 扫描最近50,000个区块
+      const fromBlock = Math.max(currentBlock - scanBlocks, 0);
+      
+      console.log(`📊 Scanning from block ${fromBlock.toLocaleString()} to ${currentBlock.toLocaleString()}`);
+      
+      // 扫描NFTMinted事件
+      const mintFilter = this.contract.filters.NFTMinted();
+      const mintEvents = await this.contract.queryFilter(mintFilter, fromBlock, currentBlock);
+      
+      console.log(`🎉 Found ${mintEvents.length} historical NFT mint events`);
+      
+      for (const event of mintEvents) {
+        // 类型检查：确保是EventLog而不是Log
+        if ('args' in event) {
+          const { to, tokenId, level, weight, paymentMethod } = event.args;
+          console.log(`📝 Processing historical mint: NFT #${tokenId} to ${to}, Level ${level}`);
+          
+          // 检查是否已存在于数据库
+          const existingStmt = this.db.prepare('SELECT token_id FROM user_nfts WHERE token_id = ?');
+          const existing = existingStmt.get(Number(tokenId));
+          
+          if (!existing) {
+            await this.handleMintEvent(to, tokenId, level, weight, paymentMethod, event);
+            console.log(`✅ Added historical NFT #${tokenId} to database`);
+          }
+        }
+      }
+      
+      // 扫描Transfer事件 (可能有转账)
+      const transferFilter = this.contract.filters.Transfer();
+      const transferEvents = await this.contract.queryFilter(transferFilter, fromBlock, currentBlock);
+      
+      console.log(`📨 Found ${transferEvents.length} historical transfer events`);
+      
+      for (const event of transferEvents) {
+        // 类型检查：确保是EventLog而不是Log
+        if ('args' in event) {
+          const { from, to, tokenId } = event.args;
+          
+          // 只处理非零地址的转账 (跳过铸造事件，因为已经在上面处理了)
+          if (from !== '0x0000000000000000000000000000000000000000') {
+            console.log(`🔄 Processing historical transfer: NFT #${tokenId} from ${from} to ${to}`);
+            await this.handleTransferEvent(from, to, tokenId);
+          }
+        }
+      }
+      
+      console.log('✅ Historical event scan completed');
+      
+    } catch (error) {
+      console.error('❌ Error scanning historical events:', error);
     }
   }
 
