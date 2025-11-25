@@ -1,35 +1,42 @@
 import express from 'express';
 import { db } from '../database';
+import { simpleNftSync } from '../services/simpleNftSync';
 
 const router = express.Router();
 
 /**
  * 获取所有 NFT 等级信息
  * GET /api/nft/levels
+ * 
+ * 🔄 已更新：现在从简化NFT同步服务读取实时数据
  */
 router.get('/levels', (req, res) => {
   try {
-    const levels = db.prepare(`
-      SELECT 
-        level,
-        name,
-        weight,
-        price_usdt,
-        price_eth,
-        supply,
-        minted,
-        available,
-        description,
-        ROUND((minted * 100.0 / supply), 2) as sold_percentage
-      FROM nft_levels
-      ORDER BY level
-    `).all();
+    // 从新的简化NFT同步服务获取数据（速度快，实时同步）
+    const inventory = simpleNftSync.getInventory();
+    
+    // 转换为前端期望的格式（兼容旧API）
+    const levels = inventory.map((item: any) => ({
+      level: item.level,
+      name: item.name,
+      weight: item.weight,
+      price_usdt: item.price_usdt,
+      price_eth: 0, // 暂不支持ETH支付
+      supply: item.total_supply,
+      minted: item.minted,
+      available: item.available,
+      description: `${item.name} - Mining Weight: ${item.weight}x`,
+      sold_percentage: item.total_supply > 0 
+        ? Math.round((item.minted * 100.0) / item.total_supply * 100) / 100 
+        : 0
+    }));
 
     res.json({
       success: true,
       data: levels
     });
   } catch (error: any) {
+    console.error('❌ Error fetching NFT levels:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -71,24 +78,39 @@ router.get('/levels/:level', (req, res) => {
 /**
  * 获取用户拥有的 NFT
  * GET /api/nft/user/:address
+ * 
+ * 🔄 已更新：现在从简化NFT同步服务读取实时数据
  */
 router.get('/user/:address', (req, res) => {
   try {
     const { address } = req.params;
     
-    const nfts = db.prepare(`
-      SELECT 
-        o.*,
-        l.name as level_name,
-        l.price_usdt
-      FROM nft_ownership o
-      JOIN nft_levels l ON o.level = l.level
-      WHERE o.owner_address = ?
-      ORDER BY o.token_id
-    `).all(address.toLowerCase());
+    if (!address) {
+      return res.status(400).json({
+        success: false,
+        error: 'Address is required'
+      });
+    }
+
+    // 从新的简化NFT同步服务获取用户NFT数据
+    const userNFTs = simpleNftSync.getUserNFTs(address);
+    
+    // 转换为前端期望的格式（兼容旧API）
+    const nfts = userNFTs.map((nft: any) => ({
+      token_id: nft.token_id,
+      owner_address: nft.owner_address,
+      level: nft.level,
+      level_name: nft.name,
+      price_usdt: nft.price_usdt,
+      effective_weight: nft.weight,
+      weight: nft.weight,
+      minted_at: nft.minted_at,
+      payment_method: nft.payment_method,
+      created_at: nft.created_at
+    }));
 
     // 计算总权重
-    const totalWeight = nfts.reduce((sum: number, nft: any) => sum + nft.effective_weight, 0);
+    const totalWeight = nfts.reduce((sum: number, nft: any) => sum + (nft.effective_weight || 0), 0);
 
     res.json({
       success: true,
@@ -99,6 +121,7 @@ router.get('/user/:address', (req, res) => {
       }
     });
   } catch (error: any) {
+    console.error('❌ Error fetching user NFTs:', error);
     res.status(500).json({
       success: false,
       error: error.message
