@@ -1,12 +1,10 @@
 import { ethers } from 'ethers';
-import Database from 'better-sqlite3';
-import path from 'path';
+import { db } from '../database';
 
-// 简化的NFT同步服务 - 直接监听合约事件并保存到数据库
+// 简化的NFT同步服务 - 直接监听合约事件并保存到主数据库
 class SimpleNFTSync {
   private provider: ethers.JsonRpcProvider;
   private contract: ethers.Contract;
-  private db: Database.Database;
 
   constructor() {
     // 初始化RPC连接 - 使用你的HTTPS RPC1 (已修复SSL问题)
@@ -28,16 +26,14 @@ class SimpleNFTSync {
       this.provider
     );
 
-    // 初始化数据库
-    const dbPath = path.join(process.cwd(), 'data', 'nft_simple.db');
-    this.db = new Database(dbPath);
+    // 使用主数据库（已挂载到Docker Volume，数据持久化）
     this.initDatabase();
   }
 
-  // 初始化数据库表
+  // 初始化数据库表（使用主数据库）
   private initDatabase() {
     // NFT所有权表 - 简化版
-    this.db.exec(`
+    db.exec(`
       CREATE TABLE IF NOT EXISTS user_nfts (
         token_id INTEGER PRIMARY KEY,
         owner_address TEXT NOT NULL,
@@ -50,7 +46,7 @@ class SimpleNFTSync {
     `);
 
     // NFT等级库存表 - 简化版
-    this.db.exec(`
+    db.exec(`
       CREATE TABLE IF NOT EXISTS nft_inventory (
         level INTEGER PRIMARY KEY,
         name TEXT NOT NULL,
@@ -64,12 +60,12 @@ class SimpleNFTSync {
     `);
 
     // 创建索引
-    this.db.exec(`
+    db.exec(`
       CREATE INDEX IF NOT EXISTS idx_user_nfts_owner ON user_nfts(owner_address);
       CREATE INDEX IF NOT EXISTS idx_user_nfts_level ON user_nfts(level);
     `);
 
-    console.log('✅ Simple NFT database initialized');
+    console.log('✅ NFT tables initialized in main database (eagle-swap.db)');
   }
 
   // 启动同步服务
@@ -109,7 +105,7 @@ class SimpleNFTSync {
       try {
         const info = await this.contract.getLevelInfo(level);
         
-        const stmt = this.db.prepare(`
+        const stmt = db.prepare(`
           INSERT OR REPLACE INTO nft_inventory 
           (level, name, weight, price_usdt, total_supply, minted, available, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
@@ -154,7 +150,7 @@ class SimpleNFTSync {
           console.log(`📝 Processing historical mint: NFT #${tokenId} to ${to}, Level ${level}`);
           
           // 检查是否已存在于数据库
-          const existingStmt = this.db.prepare('SELECT token_id FROM user_nfts WHERE token_id = ?');
+          const existingStmt = db.prepare('SELECT token_id FROM user_nfts WHERE token_id = ?');
           const existing = existingStmt.get(Number(tokenId));
           
           if (!existing) {
@@ -197,7 +193,7 @@ class SimpleNFTSync {
       const blockTimestamp = await this.getBlockTimestamp(event.blockNumber);
 
       // 保存NFT所有权
-      const stmt = this.db.prepare(`
+      const stmt = db.prepare(`
         INSERT OR REPLACE INTO user_nfts 
         (token_id, owner_address, level, weight, minted_at, payment_method)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -225,7 +221,7 @@ class SimpleNFTSync {
   private async handleTransferEvent(from: string, to: string, tokenId: bigint) {
     try {
       // 更新NFT所有者
-      const stmt = this.db.prepare(`
+      const stmt = db.prepare(`
         UPDATE user_nfts 
         SET owner_address = ? 
         WHERE token_id = ?
@@ -246,7 +242,7 @@ class SimpleNFTSync {
       const minted = Number(info[5]);
       const available = Number(info[6]);
 
-      const stmt = this.db.prepare(`
+      const stmt = db.prepare(`
         UPDATE nft_inventory 
         SET minted = ?, available = ?, updated_at = CURRENT_TIMESTAMP
         WHERE level = ?
@@ -273,7 +269,7 @@ class SimpleNFTSync {
 
   // 获取用户NFT列表
   getUserNFTs(address: string) {
-    const stmt = this.db.prepare(`
+    const stmt = db.prepare(`
       SELECT n.*, i.name, i.price_usdt
       FROM user_nfts n
       LEFT JOIN nft_inventory i ON n.level = i.level
@@ -286,7 +282,7 @@ class SimpleNFTSync {
 
   // 获取NFT库存信息
   getInventory() {
-    const stmt = this.db.prepare(`
+    const stmt = db.prepare(`
       SELECT * FROM nft_inventory 
       ORDER BY level ASC
     `);
@@ -297,7 +293,7 @@ class SimpleNFTSync {
   // 停止服务
   stop() {
     this.contract.removeAllListeners();
-    this.db.close();
+    // 注意：不关闭主数据库，因为其他服务也在使用
     console.log('🛑 Simple NFT Sync Service stopped');
   }
 }
