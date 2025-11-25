@@ -57,6 +57,7 @@ export class SwapMiningService {
         if (topNft && topNft.bonus_multiplier) {
           nftLevel = topNft.level;
           nftMultiplier = topNft.bonus_multiplier;
+          // NFT 加成：基础奖励 * NFT倍数（不包含VIP，VIP在其他地方计算）
           eagleReward = baseReward * nftMultiplier;
           
           // 记录 NFT 加成日志
@@ -304,10 +305,9 @@ export class SwapMiningService {
         nftMultiplier = 1.0;
       }
       
-      // 计算总倍数 (VIP倍数 × NFT倍数)
-      const vipMultiplier = tier.boost_percentage / 100;
-      const totalMultiplier = vipMultiplier * nftMultiplier;
-      const combinedBoost = totalMultiplier * 100;
+      // 计算总加成 (VIP百分比 + NFT百分比)
+      const nftBoostPercentage = nftMultiplier * 100;
+      const combinedBoost = tier.boost_percentage + nftBoostPercentage;
       
       return {
         success: true,
@@ -587,11 +587,12 @@ export class SwapMiningService {
         console.log('⚠️ NFT 数据查询失败，使用默认值:', error?.message || error);
       }
 
-      // 5. 计算总加成 (VIP倍数 × NFT倍数)
-      // VIP boost_percentage 是百分比 (100 = 1.0x, 120 = 1.2x)
-      const vipMultiplier = currentVip.boost_percentage / 100;
-      const totalMultiplier = vipMultiplier * nftMultiplier;
-      const totalBoost = totalMultiplier * 100; // 转回百分比显示
+      // 5. 计算总加成 (VIP百分比 + NFT百分比)
+      // VIP boost_percentage 是百分比 (100 = 100%, 120 = 120%)
+      // NFT bonus_multiplier 转换为百分比 (1.05 = 105%, 1.20 = 120%)
+      const nftBoostPercentage = nftMultiplier * 100;
+      const totalBoost = currentVip.boost_percentage + nftBoostPercentage;
+      const totalMultiplier = totalBoost / 100; // 转换为倍数用于计算奖励
 
       // 6. 获取基础配置
       const config = db.prepare('SELECT reward_rate FROM swap_mining_config WHERE id = 1').get() as any;
