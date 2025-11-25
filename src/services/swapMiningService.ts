@@ -288,18 +288,28 @@ export class SwapMiningService {
       
       // 获取最高等级 NFT 的固定倍数
       let nftMultiplier = 1.0;
+      let topNftData = null;
       try {
         const topNft = db.prepare(`
-          SELECT nb.bonus_multiplier
+          SELECT n.level, i.name as level_name, nb.bonus_multiplier, i.weight
           FROM user_nfts n
+          LEFT JOIN nft_inventory i ON n.level = i.level
           LEFT JOIN nft_level_bonus nb ON n.level = nb.nft_level
           WHERE n.owner_address = ?
           ORDER BY n.level DESC
           LIMIT 1
         `).get(normalizedAddress) as any;
         
-        if (topNft && topNft.bonus_multiplier) {
-          nftMultiplier = topNft.bonus_multiplier;
+        if (topNft) {
+          if (topNft.bonus_multiplier) {
+            nftMultiplier = topNft.bonus_multiplier;
+          }
+          topNftData = {
+            level: topNft.level,
+            tier_name: topNft.level_name || `Level ${topNft.level}`,
+            boost: topNft.bonus_multiplier * 100,
+            weight: topNft.weight || 0
+          };
         }
       } catch (e) {
         nftMultiplier = 1.0;
@@ -324,6 +334,7 @@ export class SwapMiningService {
           nft_boost: nftBoostPercentage, // 返回百分比 (例如 105)
           combined_boost: combinedBoost,
           owned_nfts: ownedNfts,
+          nft: topNftData, // 添加最高等级 NFT 信息
           tier: tier
         }
       };
