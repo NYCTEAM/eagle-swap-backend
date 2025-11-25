@@ -8,7 +8,7 @@ import { db } from '../database';
 
 // NFT 合约配置
 const NFT_CONTRACT_ADDRESS = process.env.NFT_CONTRACT_ADDRESS || '';
-const RPC_URL = process.env.BSC_RPC_URL || 'https://bsc-dataseed.binance.org/';
+const RPC_URL = process.env.X_LAYER_RPC_URL || 'https://rpc1.eagleswap.llc/xlayer/';
 
 // NFT 合约 ABI (只需要事件和查询函数)
 const NFT_ABI = [

@@ -6,7 +6,7 @@ import { logger } from '../utils/logger';
 // 配置需要追踪的代币对
 const TRACKED_PAIRS = [
   {
-    token0: '0x1E4a5963aBFD975d8c9021ce480b42188849D41d', // USDT
+    token0: '0x779Ded0c9e1022225f8E0630b35a9b54bE713736', // USDT0
     token1: '0xe538905cf8410324e03A5A23C1c177a474D59b2b', // EAGLE
     symbol: 'EAGLE/USDT',
     dex: 'potato' as const, // 使用 POTATO SWAP (Uniswap V2)

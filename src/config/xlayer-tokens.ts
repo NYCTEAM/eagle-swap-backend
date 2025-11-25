@@ -4,9 +4,9 @@
  */
 
 export const XLAYER_TOKENS = {
-  // 稳定币
+  // 稳定币 (USDT0 - 新统一稳定币)
   USDT: {
-    address: '0x1E4a5963aBFD975d8c9021ce480b42188849D41d',
+    address: '0x779Ded0c9e1022225f8E0630b35a9b54bE713736',
     symbol: 'USDT',
     decimals: 6,
   },

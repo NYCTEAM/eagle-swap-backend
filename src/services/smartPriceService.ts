@@ -4,7 +4,7 @@ import { createCustomProvider } from '../utils/customRpcProvider';
 
 // 常用代币地址
 const TOKENS = {
-  USDT: '0x1E4a5963aBFD975d8c9021ce480b42188849D41d',
+  USDT: '0x779Ded0c9e1022225f8E0630b35a9b54bE713736',
   WOKB: '0xe538905cf8410324e03A5A23C1c177a474D59b2b', // EAGLE/OKB
   EAGLE: '0xe538905cf8410324e03A5A23C1c177a474D59b2b',
 };
