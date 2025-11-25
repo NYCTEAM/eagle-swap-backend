@@ -92,6 +92,15 @@ class SimpleNFTSync {
       )
     `);
 
+    // 同步状态表 (用于增量同步)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS sync_state (
+        key TEXT PRIMARY KEY,
+        value TEXT,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // 创建索引
     db.exec(`
       CREATE INDEX IF NOT EXISTS idx_user_nfts_owner ON user_nfts(owner_address);
@@ -109,8 +118,8 @@ class SimpleNFTSync {
       // 1. 同步NFT等级信息
       await this.syncLevels();
 
-      // 2. 扫描历史NFT事件 (重要：找到用户已购买的NFT)
-      await this.scanHistoricalEvents();
+      // 2. 智能扫描历史事件 (增量或全量)
+      await this.smartScanEvents();
 
       // 3. 同步所有NFT的挂单状态 (Marketplace)
       this.syncMarketplaceListings(); // 不等待，后台运行
@@ -119,12 +128,14 @@ class SimpleNFTSync {
       this.contract.on('NFTMinted', async (to, tokenId, level, weight, paymentMethod, event) => {
         console.log(`🎉 NFT Minted: #${tokenId} to ${to}, Level ${level}`);
         await this.handleMintEvent(to, tokenId, level, weight, paymentMethod, event);
+        this.updateSyncState(event.blockNumber);
       });
 
       // 5. 监听NFT转移事件
       this.contract.on('Transfer', async (from, to, tokenId, event) => {
         console.log(`🔄 NFT Transfer: #${tokenId} from ${from} to ${to}`);
         await this.handleTransferEvent(from, to, tokenId);
+        this.updateSyncState(event.blockNumber);
       });
 
       // 6. 监听 Marketplace 事件 (如果已初始化)
@@ -148,6 +159,90 @@ class SimpleNFTSync {
     } catch (error) {
       console.error('❌ Failed to start Simple NFT Sync Service:', error);
     }
+  }
+
+  // 智能扫描事件 (替代旧的 scanHistoricalEvents)
+  private async smartScanEvents() {
+    console.log('🧠 Starting Smart Scan...');
+    try {
+      const currentBlock = await this.provider.getBlockNumber();
+      
+      // 获取上次同步的区块高度
+      const lastSyncedRow = db.prepare("SELECT value FROM sync_state WHERE key = 'last_synced_block'").get() as { value: string };
+      const lastSyncedBlock = lastSyncedRow ? parseInt(lastSyncedRow.value) : 0;
+      
+      // 合约部署的大致区块 (X Layer Mainnet 早期区块作为兜底)
+      // 如果从未同步过，从 2,000,000 开始 (假设合约在此之后部署，节省时间)
+      const DEPLOY_BLOCK = 2000000; 
+      
+      let fromBlock = lastSyncedBlock > 0 ? lastSyncedBlock + 1 : DEPLOY_BLOCK;
+      
+      // 如果 fromBlock > currentBlock，说明节点落后或重置，回退到 scanBlocks 逻辑
+      if (fromBlock > currentBlock) {
+          fromBlock = Math.max(currentBlock - 100000, 0);
+      }
+
+      console.log(`📊 Scanning range: ${fromBlock.toLocaleString()} -> ${currentBlock.toLocaleString()} (${currentBlock - fromBlock} blocks)`);
+
+      if (fromBlock >= currentBlock) {
+          console.log('✅ Already up to date.');
+          return;
+      }
+
+      // 分批扫描，避免 RPC 超时
+      const BATCH_SIZE = 50000;
+      for (let i = fromBlock; i <= currentBlock; i += BATCH_SIZE) {
+          const toBlock = Math.min(i + BATCH_SIZE - 1, currentBlock);
+          console.log(`  ↳ Batch: ${i.toLocaleString()} -> ${toBlock.toLocaleString()}`);
+          
+          await this.scanBatch(i, toBlock);
+          
+          // 更新同步状态
+          this.updateSyncState(toBlock);
+      }
+      
+      console.log('✅ Smart Scan completed');
+    } catch (error) {
+      console.error('❌ Error in smart scan:', error);
+    }
+  }
+
+  // 批量扫描内部逻辑
+  private async scanBatch(fromBlock: number, toBlock: number) {
+      // 扫描NFTMinted事件
+      const mintFilter = this.contract.filters.NFTMinted();
+      const mintEvents = await this.contract.queryFilter(mintFilter, fromBlock, toBlock);
+      for (const event of mintEvents) {
+        if ('args' in event) {
+          const { to, tokenId, level, weight, paymentMethod } = event.args;
+          const existing = db.prepare('SELECT token_id FROM user_nfts WHERE token_id = ?').get(Number(tokenId));
+          if (!existing) {
+            await this.handleMintEvent(to, tokenId, level, weight, paymentMethod, event);
+          }
+        }
+      }
+      
+      // 扫描Transfer事件
+      const transferFilter = this.contract.filters.Transfer();
+      const transferEvents = await this.contract.queryFilter(transferFilter, fromBlock, toBlock);
+      for (const event of transferEvents) {
+        if ('args' in event) {
+          const { from, to, tokenId } = event.args;
+          if (from !== '0x0000000000000000000000000000000000000000') {
+            await this.handleTransferEvent(from, to, tokenId);
+          }
+        }
+      }
+  }
+
+  // 更新同步状态
+  private updateSyncState(blockNumber: number) {
+      try {
+          db.prepare("INSERT OR REPLACE INTO sync_state (key, value, updated_at) VALUES ('last_synced_block', ?, CURRENT_TIMESTAMP)")
+            .run(blockNumber.toString());
+      } catch(e) {
+          console.error('Failed to update sync state', e);
+      }
   }
 
   // 同步所有NFT的挂单状态
@@ -224,63 +319,6 @@ class SimpleNFTSync {
     }
   }
 
-  // 扫描历史NFT事件 - 找到已存在的NFT购买记录
-  private async scanHistoricalEvents() {
-    console.log('🔍 Scanning historical NFT events...');
-    
-    try {
-      const currentBlock = await this.provider.getBlockNumber();
-      // 恢复到 10万 区块 (覆盖最近几天的交易，兼顾启动速度)
-      // 如果需要找回更早的 NFT，请手动增大此值或配置持久化存储
-      const scanBlocks = 100000; 
-      const fromBlock = Math.max(currentBlock - scanBlocks, 0);
-      
-      console.log(`📊 Scanning from block ${fromBlock.toLocaleString()} to ${currentBlock.toLocaleString()}`);
-      
-      // 扫描NFTMinted事件
-      const mintFilter = this.contract.filters.NFTMinted();
-      const mintEvents = await this.contract.queryFilter(mintFilter, fromBlock, currentBlock);
-      
-      console.log(`🎉 Found ${mintEvents.length} historical NFT mint events`);
-      
-      for (const event of mintEvents) {
-        if ('args' in event) {
-          const { to, tokenId, level, weight, paymentMethod } = event.args;
-          console.log(`📝 Processing historical mint: NFT #${tokenId} to ${to}, Level ${level}`);
-          
-          const existingStmt = db.prepare('SELECT token_id FROM user_nfts WHERE token_id = ?');
-          const existing = existingStmt.get(Number(tokenId));
-          
-          if (!existing) {
-            await this.handleMintEvent(to, tokenId, level, weight, paymentMethod, event);
-            console.log(`✅ Added historical NFT #${tokenId} to database`);
-          }
-        }
-      }
-      
-      // 扫描Transfer事件
-      const transferFilter = this.contract.filters.Transfer();
-      const transferEvents = await this.contract.queryFilter(transferFilter, fromBlock, currentBlock);
-      
-      console.log(`📨 Found ${transferEvents.length} historical transfer events`);
-      
-      for (const event of transferEvents) {
-        if ('args' in event) {
-          const { from, to, tokenId } = event.args;
-          if (from !== '0x0000000000000000000000000000000000000000') {
-            console.log(`🔄 Processing historical transfer: NFT #${tokenId} from ${from} to ${to}`);
-            await this.handleTransferEvent(from, to, tokenId);
-          }
-        }
-      }
-      
-      console.log('✅ Historical event scan completed');
-      
-    } catch (error) {
-      console.error('❌ Error scanning historical events:', error);
-    }
-  }
-
   // 处理NFT铸造事件
   private async handleMintEvent(to: string, tokenId: bigint, level: number, weight: bigint, paymentMethod: string, event: any) {
     try {
@@ -341,16 +379,12 @@ class SimpleNFTSync {
       }
   }
 
-  // 处理NFT转移事件 (修正版)
+  // 处理NFT转移事件
   private async handleTransferEvent(from: string, to: string, tokenId: bigint) {
     try {
       const normalizedTo = to.toLowerCase();
-      const normalizedFrom = from.toLowerCase();
       
       // 只要发生 Transfer，就更新 owner 并重置挂单状态
-      // (因为如果是通过 Marketplace 购买，是从 Seller -> Buyer，属于 Transfer)
-      // (如果是普通转账，也是 Transfer)
-      
       const stmt = db.prepare(`
         UPDATE user_nfts 
         SET owner_address = ?, is_listed = 0, listing_price = 0
