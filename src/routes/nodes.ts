@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { db } from '../database';
+import { simpleNftSync } from '../services/simpleNftSync';
 
 const router = Router();
 
@@ -225,54 +226,52 @@ router.get('/levels', async (req, res) => {
 
 /**
  * GET /api/nodes/my-nodes/:address
- * GET /api/nodes/user/:address (别名)
- * 获取用户的所有节点
+ * GET /api/nodes/user/:address (Alias)
+ * Get user's NFT nodes
+ * 
+ * 🔄 Updated: Reads real-time data from Simple NFT Sync Service
  */
 router.get(['/my-nodes/:address', '/user/:address'], async (req, res) => {
   try {
     const { address } = req.params;
     
-    if (!address || address.length !== 42) {
-      res.status(400).json({
+    if (!address) {
+      return res.status(400).json({
         success: false,
-        error: 'Invalid address',
+        error: 'Address is required'
       });
-      return;
     }
+
+    // Get data from Simple NFT Sync Service
+    const userNFTs = simpleNftSync.getUserNFTs(address);
     
-    const nodes = db.prepare(`
-      SELECT 
-        n.*,
-        COALESCE(SUM(r.final_reward), 0) as total_rewards,
-        COALESCE(SUM(CASE WHEN r.claimed = 0 THEN r.final_reward ELSE 0 END), 0) as pending_rewards
-      FROM nodes n
-      LEFT JOIN node_mining_rewards r ON n.token_id = r.token_id
-      WHERE n.owner_address = ?
-      GROUP BY n.id
-      ORDER BY n.mint_time DESC
-    `).all(address.toLowerCase());
+    console.log(`🔍 [Nodes User API] Address: ${address}, NFTs found: ${userNFTs.length}`);
     
-    // 添加节点等级信息
-    const NODE_LEVELS = getNodeLevels();
-    const nodesWithInfo = nodes.map((node: any) => {
-      const levelInfo = NODE_LEVELS.find((l: any) => l.id === node.level);
-      return {
-        ...node,
-        levelName: levelInfo?.name,
-        levelEmoji: levelInfo?.emoji,
-        weight: levelInfo?.weight,
-      };
-    });
-    
+    // Transform to frontend format (compatible with Manage page)
+    const nodes = userNFTs.map((nft: any) => ({
+      token_id: nft.token_id,
+      level: nft.level,
+      level_name: nft.name,
+      power: nft.weight,
+      stage: 1, // Default stage
+      difficulty_multiplier: 1.0, // Default multiplier
+      purchase_time: nft.minted_at,
+      total_earned: 0, // Not implemented yet
+      pending_rewards: 0, // Not implemented yet
+      owner_address: nft.owner_address,
+      payment_method: nft.payment_method,
+      price_usdt: nft.price_usdt
+    }));
+
     res.json({
       success: true,
-      data: nodesWithInfo,
+      data: nodes
     });
-  } catch (error) {
-    console.error('Error fetching user nodes:', error);
+  } catch (error: any) {
+    console.error('❌ Error fetching user nodes:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch user nodes',
+      error: error.message || 'Failed to fetch user nodes'
     });
   }
 });
@@ -399,61 +398,6 @@ router.get('/leaderboard', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch leaderboard',
-    });
-  }
-});
-
-/**
- * GET /api/nodes/user/:address
- * 获取用户拥有的NFT节点
- * 
- * 🔄 已更新：从简化NFT同步服务读取实时数据
- */
-router.get('/user/:address', async (req, res) => {
-  try {
-    const { address } = req.params;
-    
-    if (!address) {
-      return res.status(400).json({
-        success: false,
-        error: 'Address is required'
-      });
-    }
-
-    // 从简化NFT同步服务获取用户NFT数据（使用动态导入确保服务已初始化）
-    const { simpleNftSync } = await import('../services/simpleNftSync');
-    const userNFTs = simpleNftSync.getUserNFTs(address);
-    
-    console.log(`🔍 [Nodes User API] Address: ${address}, NFTs found: ${userNFTs.length}`);
-    if (userNFTs.length > 0) {
-      console.log(`📝 [Nodes User API] First NFT:`, userNFTs[0]);
-    }
-    
-    // 转换为前端期望的格式（兼容Manage页面）
-    const nodes = userNFTs.map((nft: any) => ({
-      token_id: nft.token_id,
-      level: nft.level,
-      level_name: nft.name,
-      power: nft.weight,
-      stage: 1, // 默认阶段
-      difficulty_multiplier: 1.0, // 默认难度倍数
-      purchase_time: nft.minted_at,
-      total_earned: 0, // NFT挖矿奖励暂未实现
-      pending_rewards: 0, // NFT挖矿奖励暂未实现
-      owner_address: nft.owner_address,
-      payment_method: nft.payment_method,
-      price_usdt: nft.price_usdt
-    }));
-
-    res.json({
-      success: true,
-      data: nodes
-    });
-  } catch (error: any) {
-    console.error('❌ Error fetching user nodes:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to fetch user nodes'
     });
   }
 });
