@@ -321,7 +321,7 @@ export class SwapMiningService {
           pending_rewards: pendingRewards,
           current_vip_level: tier.vip_level,
           vip_boost: tier.boost_percentage,
-          nft_boost: nftMultiplier,
+          nft_boost: nftBoostPercentage, // 返回百分比 (例如 105)
           combined_boost: combinedBoost,
           owned_nfts: ownedNfts,
           tier: tier
@@ -577,19 +577,20 @@ export class SwapMiningService {
           nftMultiplier = topNft.bonus_multiplier || 1.0;
         }
         
+        // NFT 加成转换为百分比 (1.05 = 105%, 1.20 = 120%)
+        const nftBoostPercentage = nftMultiplier * 100;
+        
         nftData = {
           nft_level: nftLevel,
           tier_name: tierName,
-          nft_boost: nftMultiplier
+          nft_boost: nftBoostPercentage
         };
         
       } catch (error: any) {
         console.log('⚠️ NFT 数据查询失败，使用默认值:', error?.message || error);
       }
-
+      
       // 5. 计算总加成 (VIP百分比 + NFT百分比)
-      // VIP boost_percentage 是百分比 (100 = 100%, 120 = 120%)
-      // NFT bonus_multiplier 转换为百分比 (1.05 = 105%, 1.20 = 120%)
       const nftBoostPercentage = nftMultiplier * 100;
       const totalBoost = currentVip.boost_percentage + nftBoostPercentage;
       const totalMultiplier = totalBoost / 100; // 转换为倍数用于计算奖励
