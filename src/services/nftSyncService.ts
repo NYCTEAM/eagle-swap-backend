@@ -154,10 +154,14 @@ class NFTSyncService {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       `);
 
+      // 处理权重：合约存储的权重需要除以10得到实际权重
+      const rawWeight = Number(info[1]);
+      const actualWeight = rawWeight / 10; // 合约设计：存储值除以10 = 实际权重
+      
       stmt.run(
         level,
         info[0], // name
-        Number(info[1]) / 10, // weight (除以 10)
+        actualWeight, // weight，直接使用计算后的实际权重
         Number(info[2]) / 1e6, // priceUSDT (6 decimals)
         Number(ethers.formatEther(info[3])), // priceETH
         Number(info[4]), // supply
@@ -165,6 +169,8 @@ class NFTSyncService {
         Number(info[6]), // available
         info[7] // description
       );
+
+      console.log(`✅ Synced level ${level}: ${info[0]}, weight: ${actualWeight} (raw: ${rawWeight})`);
 
       console.log(`✅ Synced level ${level}: ${info[0]}`);
     } catch (error) {
