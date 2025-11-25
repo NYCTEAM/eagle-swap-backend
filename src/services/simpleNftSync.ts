@@ -41,9 +41,17 @@ class SimpleNFTSync {
         weight REAL NOT NULL,
         minted_at DATETIME NOT NULL,
         payment_method TEXT,
+        is_listed INTEGER DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // 尝试添加 is_listed 列 (如果表已存在但没有该列)
+    try {
+      db.exec(`ALTER TABLE user_nfts ADD COLUMN is_listed INTEGER DEFAULT 0`);
+    } catch (e) {
+      // 列可能已存在，忽略错误
+    }
 
     // NFT等级库存表 - 简化版
     db.exec(`
@@ -220,16 +228,43 @@ class SimpleNFTSync {
   // 处理NFT转移事件
   private async handleTransferEvent(from: string, to: string, tokenId: bigint) {
     try {
-      // 更新NFT所有者
-      const stmt = db.prepare(`
-        UPDATE user_nfts 
-        SET owner_address = ? 
-        WHERE token_id = ?
-      `);
-
-      stmt.run(to.toLowerCase(), Number(tokenId));
+      const marketplaceAddress = (process.env.MARKETPLACE_CONTRACT_ADDRESS || '').toLowerCase();
+      const normalizedTo = to.toLowerCase();
+      const normalizedFrom = from.toLowerCase();
       
-      console.log(`✅ Updated NFT #${tokenId} owner: ${from} → ${to}`);
+      if (marketplaceAddress && normalizedTo === marketplaceAddress) {
+        // Case 1: 上架 (User -> Marketplace)
+        // 标记为已挂单，但保留 owner 为原用户，以便他们继续获得挖矿收益
+        const stmt = db.prepare(`
+          UPDATE user_nfts 
+          SET is_listed = 1
+          WHERE token_id = ?
+        `);
+        stmt.run(Number(tokenId));
+        console.log(`✅ NFT #${tokenId} listed on Marketplace (Owner kept as ${from} for rewards)`);
+        
+      } else if (marketplaceAddress && normalizedFrom === marketplaceAddress) {
+        // Case 2: 购买或取消 (Marketplace -> Buyer/User)
+        // 取消挂单标记，更新 owner 为新接收者
+        const stmt = db.prepare(`
+          UPDATE user_nfts 
+          SET owner_address = ?, is_listed = 0
+          WHERE token_id = ?
+        `);
+        stmt.run(normalizedTo, Number(tokenId));
+        console.log(`✅ NFT #${tokenId} sold/returned from Marketplace to ${to}`);
+        
+      } else {
+        // Case 3: 普通转账
+        // 更新NFT所有者
+        const stmt = db.prepare(`
+          UPDATE user_nfts 
+          SET owner_address = ?, is_listed = 0
+          WHERE token_id = ?
+        `);
+        stmt.run(normalizedTo, Number(tokenId));
+        console.log(`✅ Updated NFT #${tokenId} owner: ${from} → ${to}`);
+      }
     } catch (error) {
       console.error('❌ Error handling transfer event:', error);
     }
