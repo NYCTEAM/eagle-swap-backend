@@ -260,12 +260,17 @@ router.get(['/my-nodes/:address', '/user/:address'], async (req, res) => {
       pending_rewards: 0, // Not implemented yet
       owner_address: nft.owner_address,
       payment_method: nft.payment_method,
-      price_usdt: nft.price_usdt
+      price_usdt: nft.price_usdt,
+      is_listed: nft.is_listed === 1,
+      listing_price: nft.listing_price || 0
     }));
 
     res.json({
       success: true,
-      data: nodes
+      data: {
+        nfts: nodes,
+        count: nodes.length
+      }
     });
   } catch (error: any) {
     console.error('❌ Error fetching user nodes:', error);
