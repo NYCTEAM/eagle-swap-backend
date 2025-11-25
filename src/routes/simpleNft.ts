@@ -9,7 +9,7 @@ router.get('/levels', (req, res) => {
     const inventory = simpleNftSync.getInventory();
     
     // 转换为前端期望的格式
-    const levels = inventory.map(item => ({
+    const levels = inventory.map((item: any) => ({
       level: item.level,
       name: item.name,
       weight: item.weight,
