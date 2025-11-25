@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { db } from '../database';
+import { simpleNftSync } from '../services/simpleNftSync';
 
 const router = Router();
 
@@ -421,7 +422,6 @@ router.get('/user/:address', async (req, res) => {
     }
 
     // 从简化NFT同步服务获取用户NFT数据
-    const { simpleNftSync } = await import('../services/simpleNftSync');
     const userNFTs = simpleNftSync.getUserNFTs(address);
     
     // 转换为前端期望的格式（兼容Manage页面）
