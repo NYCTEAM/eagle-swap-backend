@@ -32,6 +32,8 @@ router.get('/listings', async (req, res) => {
             ORDER BY u.created_at DESC
         `).all();
 
+        console.log(`🔍 [API] Found ${listings.length} active listings in database`);
+
         // 映射数据结构
         const mappedListings = listings.map((l: any) => ({
             token_id: l.token_id,

@@ -8,8 +8,16 @@ class SimpleNFTSync {
   private marketplaceContract: ethers.Contract | null = null;
 
   constructor() {
-    // 初始化RPC连接 - 使用你的HTTPS RPC1
-    this.provider = new ethers.JsonRpcProvider(process.env.X_LAYER_RPC_URL || 'https://rpc1.eagleswap.llc/xlayer/');
+    // 初始化RPC连接 - 优先使用环境变量，其次自定义RPC，最后使用官方RPC作为兜底
+    const rpcUrl = process.env.X_LAYER_RPC_URL || 'https://rpc1.eagleswap.llc/xlayer/';
+    const fallbackRpc = 'https://rpc.xlayer.tech';
+    
+    try {
+        this.provider = new ethers.JsonRpcProvider(rpcUrl);
+    } catch (e) {
+        console.log(`⚠️ Primary RPC failed, using fallback: ${fallbackRpc}`);
+        this.provider = new ethers.JsonRpcProvider(fallbackRpc);
+    }
     
     // NFT合约ABI
     const nftABI = [
@@ -27,9 +35,10 @@ class SimpleNFTSync {
       this.provider
     );
 
-    // 初始化 Marketplace 合约 (如果地址存在)
-    const marketplaceAddress = process.env.MARKETPLACE_CONTRACT_ADDRESS;
+    // 初始化 Marketplace 合约 (使用默认地址兜底)
+    const marketplaceAddress = process.env.MARKETPLACE_CONTRACT_ADDRESS || '0x33d0D4a3fFC727f51d1A91d0d1eDA290193D5Df1';
     if (marketplaceAddress) {
+        console.log(`🛒 Marketplace Contract initialized at: ${marketplaceAddress}`);
         const marketplaceABI = [
             "function listings(address nftAddress, uint256 tokenId) view returns (address seller, uint256 price, bool isActive)"
         ];
