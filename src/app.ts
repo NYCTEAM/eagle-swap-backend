@@ -8,7 +8,7 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { logger, logRequest } from './utils/logger';
 
 // Import services
-import { nftSyncService } from './services/nftSyncService';
+import { simpleNftSync } from './services/simpleNftSync';
 
 // Import routes
 import tokensRouter from './routes/tokens';
@@ -28,6 +28,7 @@ import swapHistoryRouter from './routes/swapHistory';
 import xlayerChartRouter from './routes/xlayerChart';
 import marketplaceRouter from './routes/nftMarketplace';
 import nftRouter from './routes/nftRoutes';
+import simpleNftRouter from './routes/simpleNft';
 import otcRouter from './routes/otc';
 
 const app = express();
@@ -147,6 +148,7 @@ app.use('/api/swap-history', swapHistoryRouter);
 app.use('/api/xlayer-chart', xlayerChartRouter);
 app.use('/api/marketplace', marketplaceRouter);
 app.use('/api/nft', nftRouter);
+app.use('/api/simple-nft', simpleNftRouter);
 app.use('/api/otc', otcRouter);
 
 // Root endpoint
@@ -181,7 +183,7 @@ const initializeApp = async () => {
     logger.info('Database initialized successfully');
     
     // 启动NFT同步服务
-    await nftSyncService.start();
+    await simpleNftSync.start();
     logger.info('NFT sync service started successfully');
   } catch (error) {
     logger.error('Failed to initialize application', { error });
