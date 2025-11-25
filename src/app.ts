@@ -7,6 +7,9 @@ import { initDatabase } from './database/init';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { logger, logRequest } from './utils/logger';
 
+// Import services
+import { nftSyncService } from './services/nftSyncService';
+
 // Import routes
 import tokensRouter from './routes/tokens';
 import swapRouter from './routes/swap';
@@ -176,8 +179,12 @@ const initializeApp = async () => {
   try {
     await initDatabase();
     logger.info('Database initialized successfully');
+    
+    // 启动NFT同步服务
+    await nftSyncService.start();
+    logger.info('NFT sync service started successfully');
   } catch (error) {
-    logger.error('Failed to initialize database', { error });
+    logger.error('Failed to initialize application', { error });
     process.exit(1);
   }
 };
