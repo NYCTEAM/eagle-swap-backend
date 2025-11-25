@@ -9,8 +9,8 @@ class SimpleNFTSync {
   private db: Database.Database;
 
   constructor() {
-    // 初始化RPC连接 - 临时使用官方RPC修复连接问题
-    this.provider = new ethers.JsonRpcProvider(process.env.X_LAYER_RPC_URL || 'https://rpc.xlayer.tech');
+    // 初始化RPC连接 - 使用HTTP RPC1 (HTTPS有SSL问题)
+    this.provider = new ethers.JsonRpcProvider(process.env.X_LAYER_RPC_URL || 'http://rpc1.eagleswap.llc/xlayer/');
     
     // NFT合约ABI (只需要关键事件)
     const nftABI = [
