@@ -87,11 +87,11 @@ router.get('/user-stats/:address', async (req, res) => {
     const { simpleNftSync } = await import('../services/simpleNftSync');
     const userNFTs = simpleNftSync.getUserNFTs(address);
     
-    // 添加NFT数据到响应中
+    // 添加NFT数据到响应中（使用类型断言避免TypeScript错误）
     if (result.success && result.data) {
-      result.data.owned_nfts = userNFTs;
-      result.data.nft_count = userNFTs.length;
-      result.data.total_nft_weight = userNFTs.reduce((sum: number, nft: any) => sum + (nft.weight || 0), 0);
+      (result.data as any).owned_nfts = userNFTs;
+      (result.data as any).nft_count = userNFTs.length;
+      (result.data as any).total_nft_weight = userNFTs.reduce((sum: number, nft: any) => sum + (nft.weight || 0), 0);
     }
     
     res.json(result);
