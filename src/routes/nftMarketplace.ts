@@ -36,15 +36,15 @@ router.get('/listings', async (req, res) => {
 
         // 映射数据结构
         const mappedListings = listings.map((l: any) => ({
-            token_id: l.token_id,
-            seller_address: l.seller_address,
-            price: l.price,
-            nft_level: l.nft_level,
-            nft_stage: 1, // 默认阶段
-            final_power: l.final_power,
-            base_power: l.final_power,
-            level_name: l.level_name,
-            listed_at: l.listed_at
+            tokenId: l.token_id,
+            seller: l.seller_address || '', // 确保不为 null
+            price: l.price || 0,
+            level: l.nft_level || 1,
+            levelName: l.level_name || `Level ${l.nft_level}`,
+            stage: 1, // 默认阶段
+            finalPower: l.final_power || 0,
+            basePower: l.final_power || 0,
+            listedAt: l.listed_at
         }));
 
         res.json({
@@ -139,6 +139,7 @@ router.get('/user/:address/listings', async (req, res) => {
         
         const mappedListings = listings.map((row: any) => ({
             tokenId: row.token_id,
+            seller: address, // 添加 seller 字段
             price: row.price,
             level: row.nft_level,
             levelName: row.level_name,
