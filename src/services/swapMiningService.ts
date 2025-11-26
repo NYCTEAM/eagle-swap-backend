@@ -1,4 +1,5 @@
 import { db } from '../database';
+import { ethers } from 'ethers';
 
 /**
  * SWAP 交易挖矿服务
@@ -396,52 +397,164 @@ export class SwapMiningService {
   }
   
   /**
-   * 领取奖励
+   * 生成领取奖励的签名 (新版本 - 与链上合约配合)
    */
-  async claimRewards(userAddress: string, rewardIds?: number[]) {
+  async generateClaimSignature(userAddress: string) {
     try {
-      console.log(`💰 用户领取奖励: ${userAddress}`);
+      console.log(`🔐 生成领取签名: ${userAddress}`);
       
-      let claimQuery = `
-        UPDATE swap_mining_rewards 
-        SET claimed = 1, claimed_at = datetime('now')
-        WHERE user_address = ? AND claimed = 0
-      `;
+      // 1. 计算用户待领取奖励
+      const pendingRewards = this.calculatePendingRewards(userAddress);
       
-      let params: any[] = [userAddress];
-      
-      if (rewardIds && rewardIds.length > 0) {
-        claimQuery += ` AND id IN (${rewardIds.map(() => '?').join(',')})`;
-        params.push(...rewardIds);
+      if (pendingRewards <= 0) {
+        return {
+          success: false,
+          error: 'No pending rewards'
+        };
       }
       
-      const result = db.prepare(claimQuery).run(...params);
+      // 2. 检查最小领取数量
+      const minClaimAmount = parseFloat(process.env.MIN_CLAIM_AMOUNT || '1.0');
+      if (pendingRewards < minClaimAmount) {
+        return {
+          success: false,
+          error: `Minimum claim amount is ${minClaimAmount} EAGLE`
+        };
+      }
       
-      // 计算领取的总额
-      const claimedAmount = db.prepare(`
-        SELECT COALESCE(SUM(eagle_earned), 0) as total
-        FROM swap_mining_rewards 
-        WHERE user_address = ? AND claimed = 1 AND claimed_at >= datetime('now', '-1 minute')
-      `).get(userAddress) as any;
+      // 3. 获取签名配置
+      const signerPrivateKey = process.env.SIGNER_PRIVATE_KEY;
+      const contractAddress = process.env.SWAP_MINING_REWARDS_ADDRESS;
+      const chainId = parseInt(process.env.XLAYER_CHAIN_ID || '196');
       
-      // 更新用户统计
-      db.prepare(`
-        UPDATE user_swap_stats 
-        SET total_eagle_claimed = total_eagle_claimed + ?
-        WHERE user_address = ?
-      `).run(claimedAmount.total, userAddress);
+      if (!signerPrivateKey || !contractAddress) {
+        throw new Error('Missing signer configuration');
+      }
       
-      console.log(`✅ 领取成功: ${claimedAmount.total} EAGLE`);
+      // 4. 获取用户 nonce (从合约或数据库)
+      const userNonce = await this.getUserNonce(userAddress);
+      
+      // 5. 设置签名过期时间
+      const expiryMinutes = parseInt(process.env.SIGNATURE_EXPIRY_MINUTES || '30');
+      const deadline = Math.floor(Date.now() / 1000) + (expiryMinutes * 60);
+      
+      // 6. 生成签名消息
+      const amount = ethers.parseEther(pendingRewards.toString());
+      const messageHash = ethers.solidityPackedKeccak256(
+        ['address', 'uint256', 'uint256', 'uint256', 'uint256', 'address'],
+        [userAddress, amount, userNonce, deadline, chainId, contractAddress]
+      );
+      
+      // 7. 签名
+      const wallet = new ethers.Wallet(signerPrivateKey);
+      const signature = await wallet.signMessage(ethers.getBytes(messageHash));
+      
+      console.log(`✅ 签名生成成功: ${pendingRewards} EAGLE`);
       
       return {
         success: true,
         data: {
-          claimed: result.changes,
-          amount: claimedAmount.total,
+          userAddress,
+          amount: amount.toString(), // wei 格式
+          amountFormatted: pendingRewards, // 人类可读格式
+          nonce: userNonce,
+          deadline,
+          signature,
+          contractAddress,
+          chainId
         }
       };
+      
     } catch (error) {
-      console.error('❌ 领取奖励失败:', error);
+      console.error('❌ 生成签名失败:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * 计算用户待领取奖励 (从数据库)
+   */
+  private calculatePendingRewards(userAddress: string): number {
+    try {
+      // 方案1: 从 swap_transactions 计算总奖励
+      const stats = db.prepare(`
+        SELECT COALESCE(SUM(eagle_reward), 0) as total_earned
+        FROM swap_transactions 
+        WHERE user_address = ?
+      `).get(userAddress.toLowerCase()) as any;
+      
+      // 方案2: 减去已领取的奖励 (如果有记录)
+      const claimed = db.prepare(`
+        SELECT COALESCE(total_eagle_claimed, 0) as total_claimed
+        FROM user_swap_stats 
+        WHERE user_address = ?
+      `).get(userAddress.toLowerCase()) as any;
+      
+      const totalEarned = stats?.total_earned || 0;
+      const totalClaimed = claimed?.total_claimed || 0;
+      const pending = totalEarned - totalClaimed;
+      
+      console.log(`📊 奖励计算: 总获得=${totalEarned}, 已领取=${totalClaimed}, 待领取=${pending}`);
+      
+      return Math.max(0, pending);
+    } catch (error) {
+      console.error('❌ 计算奖励失败:', error);
+      return 0;
+    }
+  }
+  
+  /**
+   * 获取用户 nonce (防重放攻击)
+   */
+  private async getUserNonce(userAddress: string): Promise<number> {
+    try {
+      // 从数据库获取或初始化 nonce
+      let nonceRecord = db.prepare(`
+        SELECT nonce FROM user_claim_nonce WHERE user_address = ?
+      `).get(userAddress.toLowerCase()) as any;
+      
+      if (!nonceRecord) {
+        // 初始化 nonce
+        db.prepare(`
+          INSERT INTO user_claim_nonce (user_address, nonce) VALUES (?, 0)
+        `).run(userAddress.toLowerCase());
+        return 0;
+      }
+      
+      return nonceRecord.nonce;
+    } catch (error) {
+      console.error('❌ 获取 nonce 失败:', error);
+      return 0;
+    }
+  }
+  
+  /**
+   * 标记奖励已领取 (在用户成功调用合约后调用)
+   */
+  async markRewardsClaimed(userAddress: string, amount: number) {
+    try {
+      // 更新已领取统计
+      db.prepare(`
+        INSERT INTO user_swap_stats 
+        (user_address, total_eagle_claimed, updated_at)
+        VALUES (?, ?, datetime('now'))
+        ON CONFLICT(user_address) DO UPDATE SET
+          total_eagle_claimed = total_eagle_claimed + ?,
+          updated_at = datetime('now')
+      `).run(userAddress.toLowerCase(), amount, amount);
+      
+      // 增加 nonce
+      db.prepare(`
+        UPDATE user_claim_nonce 
+        SET nonce = nonce + 1 
+        WHERE user_address = ?
+      `).run(userAddress.toLowerCase());
+      
+      console.log(`✅ 标记已领取: ${userAddress} → ${amount} EAGLE`);
+      
+      return { success: true };
+    } catch (error) {
+      console.error('❌ 标记领取失败:', error);
       throw error;
     }
   }

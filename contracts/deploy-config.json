@@ -1,0 +1,111 @@
+{
+  "token": {
+    "name": "Eagle Token",
+    "symbol": "EAGLE",
+    "totalSupply": "1000000000",
+    "decimals": 18
+  },
+  "homeChain": "xlayer",
+  "chains": {
+    "xlayer": {
+      "name": "X Layer Mainnet",
+      "chainId": 196,
+      "lzEndpointId": 30196,
+      "lzEndpoint": "0x1a44076050125825900e736c501f859c50fE728c",
+      "isHomeChain": true,
+      "rpc": "https://rpc.xlayer.tech",
+      "explorer": "https://www.okx.com/explorer/xlayer",
+      "nativeCurrency": "OKB",
+      "deployOrder": 1
+    },
+    "ethereum": {
+      "name": "Ethereum Mainnet",
+      "chainId": 1,
+      "lzEndpointId": 30101,
+      "lzEndpoint": "0x1a44076050125825900e736c501f859c50fE728c",
+      "isHomeChain": false,
+      "rpc": "https://eth.llamarpc.com",
+      "explorer": "https://etherscan.io",
+      "nativeCurrency": "ETH",
+      "deployOrder": 2
+    },
+    "bsc": {
+      "name": "BNB Smart Chain",
+      "chainId": 56,
+      "lzEndpointId": 30102,
+      "lzEndpoint": "0x1a44076050125825900e736c501f859c50fE728c",
+      "isHomeChain": false,
+      "rpc": "https://bsc-dataseed.binance.org",
+      "explorer": "https://bscscan.com",
+      "nativeCurrency": "BNB",
+      "deployOrder": 3
+    },
+    "base": {
+      "name": "Base",
+      "chainId": 8453,
+      "lzEndpointId": 30184,
+      "lzEndpoint": "0x1a44076050125825900e736c501f859c50fE728c",
+      "isHomeChain": false,
+      "rpc": "https://mainnet.base.org",
+      "explorer": "https://basescan.org",
+      "nativeCurrency": "ETH",
+      "deployOrder": 4
+    },
+    "arbitrum": {
+      "name": "Arbitrum One",
+      "chainId": 42161,
+      "lzEndpointId": 30110,
+      "lzEndpoint": "0x1a44076050125825900e736c501f859c50fE728c",
+      "isHomeChain": false,
+      "rpc": "https://arb1.arbitrum.io/rpc",
+      "explorer": "https://arbiscan.io",
+      "nativeCurrency": "ETH",
+      "deployOrder": 5
+    },
+    "polygon": {
+      "name": "Polygon",
+      "chainId": 137,
+      "lzEndpointId": 30109,
+      "lzEndpoint": "0x1a44076050125825900e736c501f859c50fE728c",
+      "isHomeChain": false,
+      "rpc": "https://polygon-rpc.com",
+      "explorer": "https://polygonscan.com",
+      "nativeCurrency": "MATIC",
+      "deployOrder": 6
+    },
+    "avalanche": {
+      "name": "Avalanche C-Chain",
+      "chainId": 43114,
+      "lzEndpointId": 30106,
+      "lzEndpoint": "0x1a44076050125825900e736c501f859c50fE728c",
+      "isHomeChain": false,
+      "rpc": "https://api.avax.network/ext/bc/C/rpc",
+      "explorer": "https://snowtrace.io",
+      "nativeCurrency": "AVAX",
+      "deployOrder": 7
+    },
+    "optimism": {
+      "name": "Optimism",
+      "chainId": 10,
+      "lzEndpointId": 30111,
+      "lzEndpoint": "0x1a44076050125825900e736c501f859c50fE728c",
+      "isHomeChain": false,
+      "rpc": "https://mainnet.optimism.io",
+      "explorer": "https://optimistic.etherscan.io",
+      "nativeCurrency": "ETH",
+      "deployOrder": 8
+    }
+  },
+  "deploymentSteps": [
+    "1. Deploy on X Layer (Home Chain) with isHomeChain=true → Get 1B EAGLE",
+    "2. Deploy on each target chain with isHomeChain=false → 0 supply",
+    "3. On each contract, call setPeer(dstEid, bytes32(contractAddress)) to connect",
+    "4. Test cross-chain transfer with small amount",
+    "5. Add liquidity on each chain's DEX"
+  ],
+  "estimatedGasCosts": {
+    "deploy": "~0.01-0.05 native token per chain",
+    "setPeer": "~0.001-0.005 native token per peer",
+    "crossChainTransfer": "~0.001-0.01 native token + LayerZero fee"
+  }
+}

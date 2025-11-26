@@ -142,12 +142,12 @@ router.get('/pending/:address', (req, res) => {
 });
 
 /**
- * 领取奖励
- * POST /api/swap-mining/claim
+ * 生成领取签名
+ * POST /api/swap-mining/sign-claim
  */
-router.post('/claim', async (req, res) => {
+router.post('/sign-claim', async (req, res) => {
   try {
-    const { userAddress, rewardIds } = req.body;
+    const { userAddress } = req.body;
     
     if (!userAddress) {
       return res.status(400).json({
@@ -156,10 +156,36 @@ router.post('/claim', async (req, res) => {
       });
     }
     
-    const result = await swapMiningService.claimRewards(userAddress, rewardIds);
+    const result = await swapMiningService.generateClaimSignature(userAddress);
     res.json(result);
   } catch (error: any) {
-    console.error('领取奖励失败:', error);
+    console.error('生成签名失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * 标记奖励已领取
+ * POST /api/swap-mining/mark-claimed
+ */
+router.post('/mark-claimed', async (req, res) => {
+  try {
+    const { userAddress, amount } = req.body;
+    
+    if (!userAddress || !amount) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing userAddress or amount'
+      });
+    }
+    
+    const result = await swapMiningService.markRewardsClaimed(userAddress, parseFloat(amount));
+    res.json(result);
+  } catch (error: any) {
+    console.error('标记领取失败:', error);
     res.status(500).json({
       success: false,
       error: error.message
