@@ -21,11 +21,13 @@ router.post('/record', async (req, res) => {
       routeInfo
     } = req.body;
     
-    // 验证必填字段
-    if (!txHash || !userAddress || !fromToken || !toToken || !tradeValueUsdt || !chainId) {
+    // 验证必填字段 (tradeValueUsdt 可以是 0，所以用 undefined/null 检查)
+    if (!txHash || !userAddress || !fromToken || !toToken || tradeValueUsdt === undefined || tradeValueUsdt === null || !chainId) {
+      console.log('❌ Missing required fields:', { txHash, userAddress, fromToken, toToken, tradeValueUsdt, chainId });
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields'
+        error: 'Missing required fields',
+        details: { txHash: !!txHash, userAddress: !!userAddress, fromToken: !!fromToken, toToken: !!toToken, tradeValueUsdt, chainId: !!chainId }
       });
     }
     
