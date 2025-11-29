@@ -23,8 +23,9 @@ const CONTRACTS = {
   solana: {
     chainId: 501, // Custom chain ID for Solana
     rpc: process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
-    token: '4GQsSFZbULRw8RL925h39ZKAgNM36D4hwcnPMQ2LF3Rs', // EAGLE Token Mint (9 decimals)
+    token: 'ESZCBFmiArHThvQGKWn6pAZgC88TcVA3G6QxUwjyT8cH', // EAGLE Token (Token-2022 with metadata)
     decimals: 9,
+    program: 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb', // Token-2022 program
   },
 };
 
