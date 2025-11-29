@@ -2,6 +2,9 @@ import { ethers } from 'ethers';
 import { EventEmitter } from 'events';
 import Database from 'better-sqlite3';
 import path from 'path';
+import { Connection, Keypair, PublicKey, Transaction, sendAndConfirmTransaction } from '@solana/web3.js';
+import { createMintToInstruction, getOrCreateAssociatedTokenAccount, createBurnInstruction, getAssociatedTokenAddress, TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import bs58 from 'bs58';
 
 // Contract addresses
 const CONTRACTS = {
@@ -16,6 +19,12 @@ const CONTRACTS = {
     rpc: process.env.BSC_RPC_URL || 'https://bsc-dataseed1.binance.org',
     token: '0x83Fe5B70a08d42F6224A9644b3c73692f2d9092a',
     bridge: '0x0985DB9C2FA117152941521991E06AAfA03c82F3',
+  },
+  solana: {
+    chainId: 501, // Custom chain ID for Solana
+    rpc: process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
+    token: 'CRdXNe2wDXXst6fHzpKkTr8X7Esj4B4qNyp6wRqmwGPE', // EAGLE Token Mint
+    decimals: 18,
   },
 };
 
@@ -32,8 +41,8 @@ const BSC_BRIDGE_ABI = [
 
 interface BridgeRequest {
   txHash: string;
-  fromChain: 'xlayer' | 'bsc';
-  toChain: 'xlayer' | 'bsc';
+  fromChain: 'xlayer' | 'bsc' | 'solana';
+  toChain: 'xlayer' | 'bsc' | 'solana';
   from: string;
   to: string;
   amount: string;
@@ -49,7 +58,9 @@ interface BridgeRequest {
 class BridgeRelayerService extends EventEmitter {
   private xlayerProvider: ethers.JsonRpcProvider;
   private bscProvider: ethers.JsonRpcProvider;
+  private solanaConnection: Connection;
   private relayerWallet: ethers.Wallet | ethers.HDNodeWallet;
+  private solanaKeypair: Keypair | null = null;
   private pendingRequests: Map<string, BridgeRequest> = new Map();
   private isRunning: boolean = false;
   private db: Database.Database;
@@ -65,8 +76,9 @@ class BridgeRelayerService extends EventEmitter {
     // Initialize providers
     this.xlayerProvider = new ethers.JsonRpcProvider(CONTRACTS.xlayer.rpc);
     this.bscProvider = new ethers.JsonRpcProvider(CONTRACTS.bsc.rpc);
+    this.solanaConnection = new Connection(CONTRACTS.solana.rpc, 'confirmed');
     
-    // Initialize relayer wallet
+    // Initialize relayer wallet (EVM)
     const privateKey = process.env.RELAYER_PRIVATE_KEY;
     if (!privateKey) {
       console.warn('⚠️ RELAYER_PRIVATE_KEY not set, bridge relayer will not work');
@@ -75,8 +87,22 @@ class BridgeRelayerService extends EventEmitter {
       this.relayerWallet = new ethers.Wallet(privateKey);
     }
     
+    // Initialize Solana keypair
+    const solanaPrivateKey = process.env.SOLANA_PRIVATE_KEY;
+    if (solanaPrivateKey) {
+      try {
+        this.solanaKeypair = Keypair.fromSecretKey(bs58.decode(solanaPrivateKey));
+        console.log(`🌞 Solana Relayer: ${this.solanaKeypair.publicKey.toBase58()}`);
+      } catch (e) {
+        console.warn('⚠️ Invalid SOLANA_PRIVATE_KEY');
+      }
+    } else {
+      console.warn('⚠️ SOLANA_PRIVATE_KEY not set, Solana bridge will not work');
+    }
+    
     console.log(`🦅 Bridge Relayer initialized`);
-    console.log(`   Relayer address: ${this.relayerWallet.address}`);
+    console.log(`   EVM Relayer: ${this.relayerWallet.address}`);
+    console.log(`   Solana Token: ${CONTRACTS.solana.token}`);
     
     // Load pending requests from database
     this.loadPendingFromDb();
@@ -199,20 +225,28 @@ class BridgeRelayerService extends EventEmitter {
     );
 
     bridge.on('BridgeOut', async (from, to, amount, fee, destChainId, nonce, timestamp, event) => {
+      const destChainNum = Number(destChainId);
+      const destChainName = destChainNum === CONTRACTS.bsc.chainId ? 'BSC' : 
+                            destChainNum === CONTRACTS.solana.chainId ? 'Solana' : `Chain ${destChainNum}`;
+      
       console.log(`\n📤 X Layer BridgeOut detected:`);
       console.log(`   From: ${from}`);
       console.log(`   To: ${to}`);
       console.log(`   Amount: ${ethers.formatEther(amount)} EAGLE`);
-      console.log(`   Dest Chain: ${destChainId}`);
+      console.log(`   Dest Chain: ${destChainName} (${destChainId})`);
       console.log(`   Nonce: ${nonce}`);
 
       const txHash = event.log.transactionHash;
+      
+      // Determine destination chain
+      const toChain = destChainNum === CONTRACTS.bsc.chainId ? 'bsc' : 
+                      destChainNum === CONTRACTS.solana.chainId ? 'solana' : 'bsc';
       
       // Create request
       const request: BridgeRequest = {
         txHash,
         fromChain: 'xlayer',
-        toChain: 'bsc',
+        toChain,
         from,
         to,
         amount: amount.toString(),
@@ -226,9 +260,11 @@ class BridgeRelayerService extends EventEmitter {
       // Save to database
       this.saveToDb(request, ethers.formatEther(fee));
       
-      // Process on BSC
-      if (Number(destChainId) === CONTRACTS.bsc.chainId) {
+      // Process based on destination chain
+      if (destChainNum === CONTRACTS.bsc.chainId) {
         await this.releaseToBSC(request);
+      } else if (destChainNum === CONTRACTS.solana.chainId) {
+        await this.mintToSolana(request);
       }
     });
 
@@ -374,6 +410,82 @@ class BridgeRelayerService extends EventEmitter {
     }
   }
 
+  private async mintToSolana(request: BridgeRequest) {
+    try {
+      if (!this.solanaKeypair) {
+        throw new Error('Solana keypair not configured');
+      }
+      
+      request.status = 'processing';
+      console.log(`\n🔄 Processing mint on Solana for nonce ${request.nonce}...`);
+      console.log(`   Recipient: ${request.to}`);
+      console.log(`   Amount: ${ethers.formatEther(request.amount)} EAGLE`);
+
+      const mintPubkey = new PublicKey(CONTRACTS.solana.token);
+      
+      // The 'to' address should be a Solana public key (base58)
+      // For cross-chain, user provides their Solana address
+      let recipientPubkey: PublicKey;
+      try {
+        recipientPubkey = new PublicKey(request.to);
+      } catch (e) {
+        throw new Error(`Invalid Solana address: ${request.to}`);
+      }
+
+      // Get or create associated token account for recipient
+      const recipientATA = await getOrCreateAssociatedTokenAccount(
+        this.solanaConnection,
+        this.solanaKeypair,
+        mintPubkey,
+        recipientPubkey
+      );
+
+      console.log(`   Recipient ATA: ${recipientATA.address.toBase58()}`);
+
+      // Create mint instruction
+      // Amount is in wei (18 decimals), Solana token also has 18 decimals
+      const mintAmount = BigInt(request.amount);
+      
+      const mintIx = createMintToInstruction(
+        mintPubkey,
+        recipientATA.address,
+        this.solanaKeypair.publicKey, // Mint authority
+        mintAmount
+      );
+
+      // Create and send transaction
+      const transaction = new Transaction().add(mintIx);
+      
+      const signature = await sendAndConfirmTransaction(
+        this.solanaConnection,
+        transaction,
+        [this.solanaKeypair]
+      );
+
+      console.log(`   TX Signature: ${signature}`);
+      
+      request.status = 'completed';
+      request.destTxHash = signature;
+      request.completedAt = new Date();
+      
+      // Update database
+      this.updateStatusInDb(request.txHash, 'completed', signature);
+      
+      console.log(`✅ Mint completed on Solana!`);
+      this.emit('bridgeCompleted', request);
+      
+    } catch (error: any) {
+      console.error(`❌ Mint to Solana failed:`, error.message);
+      request.status = 'failed';
+      request.error = error.message;
+      
+      // Update database
+      this.updateStatusInDb(request.txHash, 'failed', undefined, error.message);
+      
+      this.emit('bridgeFailed', request);
+    }
+  }
+
   // API methods
   getStatus(txHash: string): BridgeRequest | undefined {
     return this.pendingRequests.get(txHash);
@@ -415,8 +527,10 @@ class BridgeRelayerService extends EventEmitter {
         SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
         SUM(CASE WHEN status = 'pending' OR status = 'processing' THEN 1 ELSE 0 END) as pending,
         SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
-        SUM(CASE WHEN from_chain = 'xlayer' THEN 1 ELSE 0 END) as xlayer_to_bsc,
-        SUM(CASE WHEN from_chain = 'bsc' THEN 1 ELSE 0 END) as bsc_to_xlayer,
+        SUM(CASE WHEN from_chain = 'xlayer' AND to_chain = 'bsc' THEN 1 ELSE 0 END) as xlayer_to_bsc,
+        SUM(CASE WHEN from_chain = 'bsc' AND to_chain = 'xlayer' THEN 1 ELSE 0 END) as bsc_to_xlayer,
+        SUM(CASE WHEN from_chain = 'xlayer' AND to_chain = 'solana' THEN 1 ELSE 0 END) as xlayer_to_solana,
+        SUM(CASE WHEN from_chain = 'solana' AND to_chain = 'xlayer' THEN 1 ELSE 0 END) as solana_to_xlayer,
         SUM(CAST(amount AS REAL)) / 1e18 as total_volume
       FROM bridge_transactions
     `).get() as any;
@@ -428,6 +542,8 @@ class BridgeRelayerService extends EventEmitter {
       failed: stats.failed || 0,
       xlayerToBsc: stats.xlayer_to_bsc || 0,
       bscToXlayer: stats.bsc_to_xlayer || 0,
+      xlayerToSolana: stats.xlayer_to_solana || 0,
+      solanaToXlayer: stats.solana_to_xlayer || 0,
       totalVolume: (stats.total_volume || 0).toFixed(2),
     };
   }
