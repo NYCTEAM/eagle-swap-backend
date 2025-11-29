@@ -1,5 +1,7 @@
 import { ethers } from 'ethers';
 import { EventEmitter } from 'events';
+import Database from 'better-sqlite3';
+import path from 'path';
 
 // Contract addresses
 const CONTRACTS = {
@@ -35,6 +37,7 @@ interface BridgeRequest {
   from: string;
   to: string;
   amount: string;
+  fee?: string;
   nonce: number;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   destTxHash?: string;
@@ -46,12 +49,18 @@ interface BridgeRequest {
 class BridgeRelayerService extends EventEmitter {
   private xlayerProvider: ethers.JsonRpcProvider;
   private bscProvider: ethers.JsonRpcProvider;
-  private relayerWallet: ethers.Wallet;
+  private relayerWallet: ethers.Wallet | ethers.HDNodeWallet;
   private pendingRequests: Map<string, BridgeRequest> = new Map();
   private isRunning: boolean = false;
+  private db: Database.Database;
 
   constructor() {
     super();
+    
+    // Initialize database
+    const dbPath = process.env.DATABASE_PATH || path.join(process.cwd(), 'data', 'eagleswap.db');
+    this.db = new Database(dbPath);
+    this.initDatabase();
     
     // Initialize providers
     this.xlayerProvider = new ethers.JsonRpcProvider(CONTRACTS.xlayer.rpc);
@@ -68,6 +77,103 @@ class BridgeRelayerService extends EventEmitter {
     
     console.log(`🦅 Bridge Relayer initialized`);
     console.log(`   Relayer address: ${this.relayerWallet.address}`);
+    
+    // Load pending requests from database
+    this.loadPendingFromDb();
+  }
+
+  private initDatabase() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS bridge_transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tx_hash TEXT UNIQUE NOT NULL,
+        from_chain TEXT NOT NULL,
+        to_chain TEXT NOT NULL,
+        from_address TEXT NOT NULL,
+        to_address TEXT NOT NULL,
+        amount TEXT NOT NULL,
+        fee TEXT DEFAULT '0',
+        nonce INTEGER NOT NULL,
+        status TEXT DEFAULT 'pending',
+        dest_tx_hash TEXT,
+        error TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        completed_at DATETIME
+      );
+      
+      CREATE INDEX IF NOT EXISTS idx_bridge_status ON bridge_transactions(status);
+      CREATE INDEX IF NOT EXISTS idx_bridge_from_address ON bridge_transactions(from_address);
+      CREATE INDEX IF NOT EXISTS idx_bridge_created_at ON bridge_transactions(created_at);
+    `);
+    console.log('📊 Bridge transactions table initialized');
+  }
+
+  private loadPendingFromDb() {
+    const pending = this.db.prepare(`
+      SELECT * FROM bridge_transactions WHERE status IN ('pending', 'processing')
+    `).all() as any[];
+    
+    for (const row of pending) {
+      this.pendingRequests.set(row.tx_hash, {
+        txHash: row.tx_hash,
+        fromChain: row.from_chain,
+        toChain: row.to_chain,
+        from: row.from_address,
+        to: row.to_address,
+        amount: row.amount,
+        nonce: row.nonce,
+        status: row.status,
+        destTxHash: row.dest_tx_hash,
+        error: row.error,
+        createdAt: new Date(row.created_at),
+        completedAt: row.completed_at ? new Date(row.completed_at) : undefined,
+      });
+    }
+    console.log(`📥 Loaded ${pending.length} pending bridge requests from database`);
+  }
+
+  private saveToDb(request: BridgeRequest, fee: string = '0') {
+    const stmt = this.db.prepare(`
+      INSERT INTO bridge_transactions (tx_hash, from_chain, to_chain, from_address, to_address, amount, fee, nonce, status, dest_tx_hash, error, created_at, completed_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(tx_hash) DO UPDATE SET
+        status = excluded.status,
+        dest_tx_hash = excluded.dest_tx_hash,
+        error = excluded.error,
+        completed_at = excluded.completed_at
+    `);
+    
+    stmt.run(
+      request.txHash,
+      request.fromChain,
+      request.toChain,
+      request.from,
+      request.to,
+      request.amount,
+      fee,
+      request.nonce,
+      request.status,
+      request.destTxHash || null,
+      request.error || null,
+      request.createdAt.toISOString(),
+      request.completedAt?.toISOString() || null
+    );
+  }
+
+  private updateStatusInDb(txHash: string, status: string, destTxHash?: string, error?: string) {
+    const stmt = this.db.prepare(`
+      UPDATE bridge_transactions 
+      SET status = ?, dest_tx_hash = ?, error = ?, completed_at = ?
+      WHERE tx_hash = ?
+    `);
+    
+    stmt.run(
+      status,
+      destTxHash || null,
+      error || null,
+      status === 'completed' || status === 'failed' ? new Date().toISOString() : null,
+      txHash
+    );
   }
 
   async start() {
@@ -117,6 +223,9 @@ class BridgeRelayerService extends EventEmitter {
       
       this.pendingRequests.set(txHash, request);
       
+      // Save to database
+      this.saveToDb(request, ethers.formatEther(fee));
+      
       // Process on BSC
       if (Number(destChainId) === CONTRACTS.bsc.chainId) {
         await this.releaseToBSC(request);
@@ -157,6 +266,9 @@ class BridgeRelayerService extends EventEmitter {
       
       this.pendingRequests.set(txHash, request);
       
+      // Save to database
+      this.saveToDb(request, ethers.formatEther(fee));
+      
       // Process on X Layer
       await this.releaseToXLayer(request);
     });
@@ -195,6 +307,9 @@ class BridgeRelayerService extends EventEmitter {
       request.destTxHash = tx.hash;
       request.completedAt = new Date();
       
+      // Update database
+      this.updateStatusInDb(request.txHash, 'completed', tx.hash);
+      
       console.log(`✅ Release completed on BSC!`);
       this.emit('bridgeCompleted', request);
       
@@ -202,6 +317,10 @@ class BridgeRelayerService extends EventEmitter {
       console.error(`❌ Release to BSC failed:`, error.message);
       request.status = 'failed';
       request.error = error.message;
+      
+      // Update database
+      this.updateStatusInDb(request.txHash, 'failed', undefined, error.message);
+      
       this.emit('bridgeFailed', request);
     }
   }
@@ -237,6 +356,9 @@ class BridgeRelayerService extends EventEmitter {
       request.destTxHash = tx.hash;
       request.completedAt = new Date();
       
+      // Update database
+      this.updateStatusInDb(request.txHash, 'completed', tx.hash);
+      
       console.log(`✅ Release completed on X Layer!`);
       this.emit('bridgeCompleted', request);
       
@@ -244,6 +366,10 @@ class BridgeRelayerService extends EventEmitter {
       console.error(`❌ Release to X Layer failed:`, error.message);
       request.status = 'failed';
       request.error = error.message;
+      
+      // Update database
+      this.updateStatusInDb(request.txHash, 'failed', undefined, error.message);
+      
       this.emit('bridgeFailed', request);
     }
   }
@@ -258,9 +384,77 @@ class BridgeRelayerService extends EventEmitter {
   }
 
   getHistory(limit: number = 50): BridgeRequest[] {
-    return Array.from(this.pendingRequests.values())
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .slice(0, limit);
+    // Get from database for complete history
+    const rows = this.db.prepare(`
+      SELECT * FROM bridge_transactions 
+      ORDER BY created_at DESC 
+      LIMIT ?
+    `).all(limit) as any[];
+    
+    return rows.map(row => ({
+      txHash: row.tx_hash,
+      fromChain: row.from_chain,
+      toChain: row.to_chain,
+      from: row.from_address,
+      to: row.to_address,
+      amount: row.amount,
+      fee: row.fee,
+      nonce: row.nonce,
+      status: row.status,
+      destTxHash: row.dest_tx_hash,
+      error: row.error,
+      createdAt: new Date(row.created_at),
+      completedAt: row.completed_at ? new Date(row.completed_at) : undefined,
+    }));
+  }
+
+  getStats() {
+    const stats = this.db.prepare(`
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+        SUM(CASE WHEN status = 'pending' OR status = 'processing' THEN 1 ELSE 0 END) as pending,
+        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
+        SUM(CASE WHEN from_chain = 'xlayer' THEN 1 ELSE 0 END) as xlayer_to_bsc,
+        SUM(CASE WHEN from_chain = 'bsc' THEN 1 ELSE 0 END) as bsc_to_xlayer,
+        SUM(CAST(amount AS REAL)) / 1e18 as total_volume
+      FROM bridge_transactions
+    `).get() as any;
+    
+    return {
+      totalTransactions: stats.total || 0,
+      completed: stats.completed || 0,
+      pending: stats.pending || 0,
+      failed: stats.failed || 0,
+      xlayerToBsc: stats.xlayer_to_bsc || 0,
+      bscToXlayer: stats.bsc_to_xlayer || 0,
+      totalVolume: (stats.total_volume || 0).toFixed(2),
+    };
+  }
+
+  getUserHistory(address: string, limit: number = 20): BridgeRequest[] {
+    const rows = this.db.prepare(`
+      SELECT * FROM bridge_transactions 
+      WHERE LOWER(from_address) = LOWER(?) OR LOWER(to_address) = LOWER(?)
+      ORDER BY created_at DESC 
+      LIMIT ?
+    `).all(address, address, limit) as any[];
+    
+    return rows.map(row => ({
+      txHash: row.tx_hash,
+      fromChain: row.from_chain,
+      toChain: row.to_chain,
+      from: row.from_address,
+      to: row.to_address,
+      amount: row.amount,
+      fee: row.fee,
+      nonce: row.nonce,
+      status: row.status,
+      destTxHash: row.dest_tx_hash,
+      error: row.error,
+      createdAt: new Date(row.created_at),
+      completedAt: row.completed_at ? new Date(row.completed_at) : undefined,
+    }));
   }
 
   // Manual trigger (for API endpoint)
