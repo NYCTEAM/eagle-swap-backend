@@ -23,8 +23,8 @@ const CONTRACTS = {
   solana: {
     chainId: 501, // Custom chain ID for Solana
     rpc: process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
-    token: 'CRdXNe2wDXXst6fHzpKkTr8X7Esj4B4qNyp6wRqmwGPE', // EAGLE Token Mint
-    decimals: 18,
+    token: '4GQsSFZbULRw8RL925h39ZKAgNM36D4hwcnPMQ2LF3Rs', // EAGLE Token Mint (9 decimals)
+    decimals: 9,
   },
 };
 
@@ -484,8 +484,12 @@ class BridgeRelayerService extends EventEmitter {
       console.log(`   Recipient ATA: ${recipientATA.address.toBase58()}`);
 
       // Create mint instruction
-      // Amount is in wei (18 decimals), Solana token also has 18 decimals
-      const mintAmount = BigInt(request.amount);
+      // Amount from X Layer is in wei (18 decimals), Solana token has 9 decimals
+      // Convert: amount / 10^9 (divide by 10^9 to go from 18 to 9 decimals)
+      const amountBigInt = BigInt(request.amount);
+      const mintAmount = amountBigInt / BigInt(10 ** 9); // Convert 18 decimals to 9 decimals
+      
+      console.log(`   Mint Amount (9 decimals): ${mintAmount.toString()}`);
       
       const mintIx = createMintToInstruction(
         mintPubkey,
