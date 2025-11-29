@@ -30,6 +30,8 @@ import marketplaceRouter from './routes/nftMarketplace';
 import nftRouter from './routes/nftRoutes';
 import simpleNftRouter from './routes/simpleNft';
 import otcRouter from './routes/otc';
+import bridgeRouter from './routes/bridge';
+import { bridgeRelayerService } from './services/bridgeRelayerService';
 
 const app = express();
 
@@ -150,6 +152,7 @@ app.use('/api/marketplace', marketplaceRouter);
 app.use('/api/nft', nftRouter);
 app.use('/api/simple-nft', simpleNftRouter);
 app.use('/api/otc', otcRouter);
+app.use('/api/bridge', bridgeRouter);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -185,6 +188,14 @@ const initializeApp = async () => {
     // 启动NFT同步服务
     await simpleNftSync.start();
     logger.info('NFT sync service started successfully');
+    
+    // 启动Bridge Relayer服务
+    if (process.env.RELAYER_PRIVATE_KEY) {
+      await bridgeRelayerService.start();
+      logger.info('Bridge relayer service started successfully');
+    } else {
+      logger.warn('RELAYER_PRIVATE_KEY not set, bridge relayer disabled');
+    }
   } catch (error) {
     logger.error('Failed to initialize application', { error });
     process.exit(1);
