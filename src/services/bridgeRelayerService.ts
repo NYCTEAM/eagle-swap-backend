@@ -12,7 +12,7 @@ const CONTRACTS = {
     chainId: 196,
     rpc: process.env.XLAYER_RPC_URL || 'https://rpc.xlayer.tech',
     token: '0xdd9B82048D2408D69374Aecb6Cf65e66754c95bc',
-    bridge: '0x63A65A216c213f636e06D4aD10e1b2995b19e82F',
+    bridge: '0xC8ae328157941C5e8ce47756C71B97a93232Da3b', // V2 with Solana support
   },
   bsc: {
     chainId: 56,
@@ -31,6 +31,7 @@ const CONTRACTS = {
 // Bridge ABIs
 const XLAYER_BRIDGE_ABI = [
   'event BridgeOut(address indexed from, address indexed to, uint256 amount, uint256 fee, uint256 indexed destChainId, uint256 nonce, uint256 timestamp)',
+  'event BridgeOutSolana(address indexed from, bytes32 indexed solanaAddress, uint256 amount, uint256 fee, uint256 nonce, uint256 timestamp)',
   'function bridgeIn(address to, uint256 amount, uint256 srcChainId, uint256 srcNonce, bytes calldata signature) external',
 ];
 
@@ -268,7 +269,47 @@ class BridgeRelayerService extends EventEmitter {
       }
     });
 
-    console.log('👂 Listening for X Layer bridge events...');
+    // Listen for Solana-specific bridge events
+    bridge.on('BridgeOutSolana', async (from, solanaAddress, amount, fee, nonce, timestamp, event) => {
+      console.log(`\n📤 X Layer BridgeOutSolana detected:`);
+      console.log(`   From: ${from}`);
+      console.log(`   Solana Address: ${solanaAddress}`);
+      console.log(`   Amount: ${ethers.formatEther(amount)} EAGLE`);
+      console.log(`   Nonce: ${nonce}`);
+
+      const txHash = event.log.transactionHash;
+      
+      // Convert bytes32 to Solana address (Base58)
+      // Remove 0x prefix and convert hex to bytes, then to base58
+      const solanaAddressHex = solanaAddress.slice(2); // Remove 0x
+      const solanaAddressBytes = Buffer.from(solanaAddressHex, 'hex');
+      const solanaAddressBase58 = bs58.encode(solanaAddressBytes);
+      
+      console.log(`   Solana Address (Base58): ${solanaAddressBase58}`);
+      
+      // Create request
+      const request: BridgeRequest = {
+        txHash,
+        fromChain: 'xlayer',
+        toChain: 'solana',
+        from,
+        to: solanaAddressBase58, // Use decoded Solana address
+        amount: amount.toString(),
+        nonce: Number(nonce),
+        status: 'pending',
+        createdAt: new Date(),
+      };
+      
+      this.pendingRequests.set(txHash, request);
+      
+      // Save to database
+      this.saveToDb(request, ethers.formatEther(fee));
+      
+      // Process on Solana
+      await this.mintToSolana(request);
+    });
+
+    console.log('👂 Listening for X Layer bridge events (including Solana)...');
   }
 
   private async listenBSCEvents() {
