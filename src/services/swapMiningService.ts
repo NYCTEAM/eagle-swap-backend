@@ -289,6 +289,7 @@ export class SwapMiningService {
       
       // 获取最高等级 NFT 的固定倍数
       let nftMultiplier = 1.0;
+      let hasNft = false;
       let topNftData = null;
       try {
         const topNft = db.prepare(`
@@ -302,22 +303,27 @@ export class SwapMiningService {
         `).get(normalizedAddress) as any;
         
         if (topNft) {
+          hasNft = true;
           if (topNft.bonus_multiplier) {
             nftMultiplier = topNft.bonus_multiplier;
           }
           topNftData = {
             level: topNft.level,
             tier_name: topNft.level_name || `Level ${topNft.level}`,
-            boost: topNft.bonus_multiplier * 100,
+            boost: (nftMultiplier - 1) * 100, // 额外加成百分比 (例如 1.05 -> 5%)
             weight: topNft.weight || 0
           };
         }
       } catch (e) {
         nftMultiplier = 1.0;
+        hasNft = false;
       }
       
-      // 计算总加成 (VIP百分比 + NFT百分比)
-      const nftBoostPercentage = nftMultiplier * 100;
+      // 计算加成:
+      // - VIP Boost: 基础 100% + VIP 等级加成
+      // - NFT Boost: 只有持有 NFT 时才有加成，否则为 0%
+      // - Combined Boost: VIP Boost + NFT Boost (额外部分)
+      const nftBoostPercentage = hasNft ? (nftMultiplier - 1) * 100 : 0; // 没有 NFT = 0%
       const combinedBoost = tier.boost_percentage + nftBoostPercentage;
       
       return {
