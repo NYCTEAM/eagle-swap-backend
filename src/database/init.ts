@@ -251,6 +251,7 @@ export async function initializeDatabase(): Promise<sqlite3.Database> {
           'init_yearly_rewards_schema.sql',
           'init_yearly_rewards.sql',
           'schema-solana-swap.sql',
+          'schema-multichain-nft.sql',
         ];
 
         for (const sqlFile of sqlFiles) {

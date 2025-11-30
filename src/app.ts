@@ -32,6 +32,7 @@ import simpleNftRouter from './routes/simpleNft';
 import otcRouter from './routes/otc';
 import bridgeRouter from './routes/bridge';
 import solanaSwapRouter from './routes/solanaSwap';
+import multichainNftRouter from './routes/multichainNft';
 import { bridgeRelayerService } from './services/bridgeRelayerService';
 
 const app = express();
@@ -155,6 +156,7 @@ app.use('/api/simple-nft', simpleNftRouter);
 app.use('/api/otc', otcRouter);
 app.use('/api/bridge', bridgeRouter);
 app.use('/api/solana-swap', solanaSwapRouter);
+app.use('/api/multichain-nft', multichainNftRouter);
 
 // Root endpoint
 app.get('/', (req, res) => {
