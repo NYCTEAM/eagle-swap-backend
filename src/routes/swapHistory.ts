@@ -7,12 +7,21 @@ import { logger } from '../utils/logger';
 
 const router = Router();
 
+// Validate both EVM and Solana addresses
+const isValidWalletAddress = (value: string) => {
+  // EVM address: 0x + 40 hex chars
+  const isEvm = /^0x[a-fA-F0-9]{40}$/.test(value);
+  // Solana address: Base58, 32-44 chars
+  const isSolana = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(value);
+  return isEvm || isSolana;
+};
+
 /**
  * GET /api/swap-history/:userAddress
  * 获取用户的 Swap 历史记录
  */
 router.get('/:userAddress',
-  param('userAddress').isEthereumAddress().withMessage('Invalid Ethereum address'),
+  param('userAddress').custom(isValidWalletAddress).withMessage('Invalid wallet address'),
   query('chainId').optional().isInt({ min: 0 }).withMessage('Invalid chain ID'), // 0 = all chains
   query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100'),
   query('offset').optional().isInt({ min: 0 }).withMessage('Offset must be non-negative'),
@@ -54,7 +63,7 @@ router.get('/:userAddress',
  * 获取用户的 Swap 统计数据
  */
 router.get('/:userAddress/stats',
-  param('userAddress').isEthereumAddress().withMessage('Invalid Ethereum address'),
+  param('userAddress').custom(isValidWalletAddress).withMessage('Invalid wallet address'),
   query('chainId').optional().isInt({ min: 0 }).withMessage('Invalid chain ID'), // 0 = all chains
   checkValidation,
   asyncHandler(async (req, res) => {
@@ -86,7 +95,7 @@ router.get('/:userAddress/stats',
  * 获取用户的 TWAP 订单
  */
 router.get('/twap/:userAddress',
-  param('userAddress').isEthereumAddress().withMessage('Invalid Ethereum address'),
+  param('userAddress').custom(isValidWalletAddress).withMessage('Invalid wallet address'),
   query('chainId').optional().isInt({ min: 1 }).withMessage('Invalid chain ID'),
   query('status').optional().isIn(['active', 'completed', 'cancelled', 'expired']).withMessage('Invalid status'),
   checkValidation,
@@ -113,7 +122,7 @@ router.get('/twap/:userAddress',
  * 获取用户的 Limit Orders
  */
 router.get('/limit/:userAddress',
-  param('userAddress').isEthereumAddress().withMessage('Invalid Ethereum address'),
+  param('userAddress').custom(isValidWalletAddress).withMessage('Invalid wallet address'),
   query('chainId').optional().isInt({ min: 1 }).withMessage('Invalid chain ID'),
   query('status').optional().isIn(['active', 'filled', 'cancelled', 'expired']).withMessage('Invalid status'),
   checkValidation,
