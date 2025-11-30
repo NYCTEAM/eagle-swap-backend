@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS nft_chain_contracts (
 -- 插入已知合约
 INSERT OR REPLACE INTO nft_chain_contracts (chain_id, chain_name, contract_address, payment_tokens, is_active, deployed_at)
 VALUES 
-    (196, 'X Layer', '0xc80088A4bc2C5d90b9747CFCe8841b4c2326aE82', '["USDT", "OKB"]', 1, '2025-11-20'),
+    (196, 'X Layer', '0xc301211e0e9ADD883135eA268444649ee6c510c5', '["USDT", "NATIVE"]', 1, '2025-11-30'),
     (56, 'BSC', '', '["USDT", "BNB"]', 0, NULL),
     (900, 'Solana', '', '["USDC", "SOL"]', 0, NULL);
 
