@@ -3,7 +3,11 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { body, param, query } from 'express-validator';
 import { checkValidation } from '../middleware/validation';
 import { logger } from '../utils/logger';
-import { db } from '../database/db';
+import { db } from '../database';
+import { swapMiningService } from '../services/swapMiningService';
+
+// Solana Chain ID for swap mining
+const SOLANA_CHAIN_ID = 900;
 
 const router = Router();
 
@@ -125,6 +129,29 @@ router.post('/record',
         tokenOutSymbol === 'USDC' ? parseFloat(platformFee) : 0,
         platformFeeUsd || 0
       ]);
+
+      // 🎯 同时记录到 Swap Mining 系统 (用于 EAGLE 奖励)
+      if (status === 'success' && amountInUsd && amountInUsd > 0) {
+        try {
+          await swapMiningService.recordSwap({
+            txHash: signature,
+            userAddress: userAddress,
+            fromToken: tokenInMint,
+            toToken: tokenOutMint,
+            fromAmount: parseFloat(amountIn) || 0,
+            toAmount: parseFloat(amountOut) || 0,
+            tradeValueUsdt: amountInUsd,
+            chainId: SOLANA_CHAIN_ID,
+            routeInfo: dexName,
+            fromTokenSymbol: tokenInSymbol,
+            toTokenSymbol: tokenOutSymbol
+          });
+          logger.info('Solana swap recorded to mining system', { signature, userAddress, amountInUsd });
+        } catch (miningError: any) {
+          // 不影响主流程，只记录警告
+          logger.warn('Failed to record to swap mining', { signature, error: miningError.message });
+        }
+      }
 
       logger.info('Solana swap recorded', { signature, userAddress, dexName });
 
