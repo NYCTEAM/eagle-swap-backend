@@ -30,7 +30,7 @@ class SimpleNFTSync {
 
     // 初始化NFT合约
     this.contract = new ethers.Contract(
-      process.env.NFT_CONTRACT_ADDRESS || '0xC301211e0e9ADD883135eA268444649ee6c510c5',
+      process.env.NFT_CONTRACT_ADDRESS || '0x8d3FBe540CBe8189333A1758cE3801067A023809',
       nftABI,
       this.provider
     );
