@@ -4,6 +4,7 @@ import { body, param, query } from 'express-validator';
 import { checkValidation } from '../middleware/validation';
 import { logger } from '../utils/logger';
 import { db } from '../database';
+import { multiChainNftSync } from '../services/multiChainNftSync';
 
 const router = Router();
 
@@ -338,6 +339,72 @@ router.get('/check-availability/:chainId/:level',
         minted: inventory.minted,
         available,
         isAvailable: available > 0
+      },
+      timestamp: new Date().toISOString()
+    });
+  })
+);
+
+/**
+ * GET /api/multichain-nft/sync-status
+ * 获取多链同步状态
+ */
+router.get('/sync-status',
+  asyncHandler(async (req, res) => {
+    const status = multiChainNftSync.getSyncStatus();
+
+    res.json({
+      success: true,
+      data: status,
+      timestamp: new Date().toISOString()
+    });
+  })
+);
+
+/**
+ * GET /api/multichain-nft/user-nfts/:address
+ * 获取用户在所有链上的 NFT (使用新的同步服务)
+ */
+router.get('/user-nfts/:address',
+  param('address').custom(isValidWalletAddress).withMessage('Invalid wallet address'),
+  query('chainId').optional().isInt().withMessage('Invalid chain ID'),
+  checkValidation,
+  asyncHandler(async (req, res) => {
+    const { address } = req.params;
+    const chainId = req.query.chainId ? parseInt(req.query.chainId as string) : undefined;
+
+    const nfts = multiChainNftSync.getUserNFTs(address.toLowerCase(), chainId);
+
+    res.json({
+      success: true,
+      data: {
+        address,
+        chainId: chainId || 'all',
+        nfts,
+        count: nfts.length
+      },
+      timestamp: new Date().toISOString()
+    });
+  })
+);
+
+/**
+ * GET /api/multichain-nft/inventory-stats
+ * 获取库存统计 (使用新的同步服务)
+ */
+router.get('/inventory-stats',
+  query('chainId').optional().isInt().withMessage('Invalid chain ID'),
+  checkValidation,
+  asyncHandler(async (req, res) => {
+    const chainId = req.query.chainId ? parseInt(req.query.chainId as string) : undefined;
+
+    const stats = multiChainNftSync.getInventoryStats(chainId);
+
+    res.json({
+      success: true,
+      data: {
+        chainId: chainId || 'all',
+        stats
       },
       timestamp: new Date().toISOString()
     });

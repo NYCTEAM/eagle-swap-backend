@@ -9,6 +9,7 @@ import { logger, logRequest } from './utils/logger';
 
 // Import services
 import { simpleNftSync } from './services/simpleNftSync';
+import { multiChainNftSync } from './services/multiChainNftSync';
 
 // Import routes
 import tokensRouter from './routes/tokens';
@@ -189,9 +190,16 @@ const initializeApp = async () => {
     await initDatabase();
     logger.info('Database initialized successfully');
     
-    // 启动NFT同步服务
-    await simpleNftSync.start();
-    logger.info('NFT sync service started successfully');
+    // 启动多链NFT同步服务
+    const useMultiChain = process.env.USE_MULTICHAIN_NFT_SYNC === 'true';
+    
+    if (useMultiChain) {
+      await multiChainNftSync.start();
+      logger.info('Multi-chain NFT sync service started successfully');
+    } else {
+      await simpleNftSync.start();
+      logger.info('Single-chain NFT sync service started successfully');
+    }
     
     // 启动Bridge Relayer服务
     if (process.env.RELAYER_PRIVATE_KEY) {
