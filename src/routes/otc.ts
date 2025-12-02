@@ -348,6 +348,270 @@ router.get('/stats/user/:address', (req: Request, res: Response) => {
 });
 
 /**
+ * 记录订单创建（由前端在合约交易成功后调用）
+ * POST /api/otc/orders
+ */
+router.post('/orders', (req: Request, res: Response) => {
+  try {
+    const {
+      orderId,
+      maker,
+      baseToken,
+      quoteToken,
+      baseAmount,
+      quoteAmount,
+      price,
+      network,
+      chainId,
+      txHash,
+      blockNumber,
+      expiryTs = 0,
+    } = req.body;
+
+    // 验证必填字段
+    if (!orderId || !maker || !baseToken || !quoteToken || !baseAmount || !quoteAmount || !network || !txHash) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields',
+      });
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+
+    // 插入订单记录
+    const stmt = db.prepare(`
+      INSERT INTO otc_orders (
+        order_id, maker_address, base_token, quote_token,
+        base_amount, quote_amount, price, status,
+        network, chain_id, tx_hash, block_number,
+        expiry_ts, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      orderId,
+      maker.toLowerCase(),
+      baseToken.toLowerCase(),
+      quoteToken.toLowerCase(),
+      baseAmount,
+      quoteAmount,
+      price,
+      'open',
+      network,
+      chainId,
+      txHash,
+      blockNumber || 0,
+      expiryTs,
+      now,
+      now
+    );
+
+    // 更新用户统计
+    updateUserStats(maker.toLowerCase(), network, 'order_created');
+
+    res.json({
+      success: true,
+      data: { orderId, status: 'open' },
+    });
+  } catch (error) {
+    console.error('❌ 记录订单失败:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to record order',
+    });
+  }
+});
+
+/**
+ * 记录订单成交（由前端在合约交易成功后调用）
+ * POST /api/otc/fills
+ */
+router.post('/fills', (req: Request, res: Response) => {
+  try {
+    const {
+      orderId,
+      taker,
+      baseAmount,
+      quoteAmount,
+      network,
+      txHash,
+      blockNumber,
+    } = req.body;
+
+    if (!orderId || !taker || !baseAmount || !quoteAmount || !network || !txHash) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields',
+      });
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+
+    // 获取订单信息
+    const order = db
+      .prepare('SELECT * FROM otc_orders WHERE order_id = ?')
+      .get(orderId) as any;
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        error: 'Order not found',
+      });
+    }
+
+    // 插入成交记录
+    const fillStmt = db.prepare(`
+      INSERT INTO otc_fills (
+        order_id, maker_address, taker_address,
+        base_token, quote_token, base_amount, quote_amount,
+        price, network, tx_hash, block_number, filled_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    fillStmt.run(
+      orderId,
+      order.maker_address,
+      taker.toLowerCase(),
+      order.base_token,
+      order.quote_token,
+      baseAmount,
+      quoteAmount,
+      order.price,
+      network,
+      txHash,
+      blockNumber || 0,
+      now
+    );
+
+    // 更新订单状态
+    db.prepare('UPDATE otc_orders SET status = ?, updated_at = ? WHERE order_id = ?')
+      .run('filled', now, orderId);
+
+    // 更新用户统计
+    updateUserStats(order.maker_address, network, 'order_filled');
+    updateUserStats(taker.toLowerCase(), network, 'order_taken');
+
+    res.json({
+      success: true,
+      data: { orderId, status: 'filled' },
+    });
+  } catch (error) {
+    console.error('❌ 记录成交失败:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to record fill',
+    });
+  }
+});
+
+/**
+ * 记录订单取消（由前端在合约交易成功后调用）
+ * DELETE /api/otc/orders/:orderId
+ */
+router.delete('/orders/:orderId', (req: Request, res: Response) => {
+  try {
+    const { orderId } = req.params;
+    const { maker, network } = req.body;
+
+    if (!maker || !network) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields',
+      });
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+
+    // 验证订单存在且属于该用户
+    const order = db
+      .prepare('SELECT * FROM otc_orders WHERE order_id = ? AND maker_address = ?')
+      .get(orderId, maker.toLowerCase()) as any;
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        error: 'Order not found or unauthorized',
+      });
+    }
+
+    // 更新订单状态
+    db.prepare('UPDATE otc_orders SET status = ?, updated_at = ? WHERE order_id = ?')
+      .run('cancelled', now, orderId);
+
+    // 更新用户统计
+    updateUserStats(maker.toLowerCase(), network, 'order_cancelled');
+
+    res.json({
+      success: true,
+      data: { orderId, status: 'cancelled' },
+    });
+  } catch (error) {
+    console.error('❌ 取消订单失败:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to cancel order',
+    });
+  }
+});
+
+/**
+ * 更新用户统计
+ */
+function updateUserStats(address: string, network: string, action: string) {
+  try {
+    const now = Math.floor(Date.now() / 1000);
+
+    // 检查是否存在统计记录
+    const existing = db
+      .prepare('SELECT * FROM otc_user_stats WHERE user_address = ? AND network = ?')
+      .get(address, network) as OTCUserStats | undefined;
+
+    if (!existing) {
+      // 创建新记录
+      db.prepare(`
+        INSERT INTO otc_user_stats (
+          user_address, network, orders_created, orders_filled,
+          orders_cancelled, orders_taken, volume_as_maker,
+          volume_as_taker, total_volume, total_trades,
+          first_trade_at, last_trade_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        address,
+        network,
+        action === 'order_created' ? 1 : 0,
+        action === 'order_filled' ? 1 : 0,
+        action === 'order_cancelled' ? 1 : 0,
+        action === 'order_taken' ? 1 : 0,
+        0, 0, 0, 0,
+        now,
+        now
+      );
+    } else {
+      // 更新现有记录
+      let updateQuery = 'UPDATE otc_user_stats SET last_trade_at = ?';
+      const params: any[] = [now];
+
+      if (action === 'order_created') {
+        updateQuery += ', orders_created = orders_created + 1';
+      } else if (action === 'order_filled') {
+        updateQuery += ', orders_filled = orders_filled + 1';
+      } else if (action === 'order_cancelled') {
+        updateQuery += ', orders_cancelled = orders_cancelled + 1';
+      } else if (action === 'order_taken') {
+        updateQuery += ', orders_taken = orders_taken + 1';
+      }
+
+      updateQuery += ' WHERE user_address = ? AND network = ?';
+      params.push(address, network);
+
+      db.prepare(updateQuery).run(...params);
+    }
+  } catch (error) {
+    console.error('❌ 更新用户统计失败:', error);
+  }
+}
+
+/**
  * 健康检查
  * GET /api/otc/health
  */
