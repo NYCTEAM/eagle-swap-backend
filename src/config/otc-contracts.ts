@@ -31,7 +31,7 @@ export const OTC_CONTRACTS: Record<string, OTCContractConfig> = {
     chainName: 'X Layer',
     contractAddress: '0x22579d6C47edEC5Cb31Dd1fD238C7d0892Fd285c', // UniversalOTC V2
     deployed: true,
-    deployedAt: Date.now(),
+    deployedAt: 1733112985000, // 2025-12-02 02:56:25 UTC
   },
 
   // Ethereum 主网
