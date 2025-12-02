@@ -29,8 +29,9 @@ export const OTC_CONTRACTS: Record<string, OTCContractConfig> = {
   xlayer: {
     chainId: 196,
     chainName: 'X Layer',
-    contractAddress: '0x0000000000000000000000000000000000000000', // 待部署后更新
-    deployed: false,
+    contractAddress: '0x22579d6C47edEC5Cb31Dd1fD238C7d0892Fd285c', // UniversalOTC V2
+    deployed: true,
+    deployedAt: Date.now(),
   },
 
   // Ethereum 主网
@@ -45,8 +46,9 @@ export const OTC_CONTRACTS: Record<string, OTCContractConfig> = {
   bsc: {
     chainId: 56,
     chainName: 'BSC',
-    contractAddress: '0x0000000000000000000000000000000000000000', // 待部署后更新
-    deployed: false,
+    contractAddress: '0xc7801000FCBfF7C2fA05F6B38Ead39401F0551F6', // UniversalOTC V2
+    deployed: true,
+    deployedAt: Date.now(),
   },
 
   // Polygon
