@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import { app, initializeApp } from './app';
 import { logger } from './utils/logger';
 import { startDailySettlement } from './services/dailySettlement';
+import { startOTCSync } from './services/otcSync';
 // 图表功能已移除 - 不需要价格收集服务
 // import { priceCollector } from './services/priceCollector';
 // import { hotPairsMonitor } from './services/hotPairsMonitor';
@@ -19,6 +20,9 @@ const startServer = async () => {
 
     // Start daily settlement cron job
     startDailySettlement();
+
+    // Start OTC event sync service
+    startOTCSync();
 
     // 图表功能已移除 - 禁用价格收集服务
     // Start price collector for X Layer chart data
