@@ -261,8 +261,8 @@ router.get('/history/user/:address', (req: Request, res: Response) => {
  * GET /api/otc/stats?network=X Layer
  */
 router.get('/stats', (req: Request, res: Response) => {
+  const { network = 'X Layer' } = req.query;
   try {
-    const { network = 'X Layer' } = req.query;
     const now = Math.floor(Date.now() / 1000);
     const oneDayAgo = now - 86400;
 
@@ -323,9 +323,15 @@ router.get('/stats', (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('❌ 获取统计数据失败:', error);
+    console.error('Error details:', {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      network,
+    });
     res.status(500).json({
       success: false,
       error: 'Failed to fetch statistics',
+      details: error instanceof Error ? error.message : String(error),
     });
   }
 });
