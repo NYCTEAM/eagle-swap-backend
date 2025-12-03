@@ -107,7 +107,7 @@ router.get('/orders', (req: Request, res: Response) => {
     }
 
     if (network) {
-      query += ' AND network = ?';
+      query += ' AND LOWER(network) = LOWER(?)';
       params.push(network);
     }
 
@@ -149,7 +149,7 @@ router.get('/orders/user/:address', (req: Request, res: Response) => {
     const params: any[] = [address.toLowerCase()];
 
     if (network) {
-      query += ' AND network = ?';
+      query += ' AND LOWER(network) = LOWER(?)';
       params.push(network);
     }
 
