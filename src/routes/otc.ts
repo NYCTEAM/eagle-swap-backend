@@ -102,8 +102,14 @@ router.get('/orders', (req: Request, res: Response) => {
     const params: any[] = [];
 
     if (status) {
-      query += ' AND status = ?';
-      params.push(status);
+      if (status === 'open') {
+        // 'open' 状态包含 'open' 和 'partial' 状态的订单
+        query += ' AND (status = ? OR status = ?)';
+        params.push('open', 'partial');
+      } else {
+        query += ' AND status = ?';
+        params.push(status);
+      }
     }
 
     if (network) {
@@ -257,34 +263,62 @@ router.get('/history/user/:address', (req: Request, res: Response) => {
 router.get('/stats', (req: Request, res: Response) => {
   try {
     const { network = 'X Layer' } = req.query;
+    const now = Math.floor(Date.now() / 1000);
+    const oneDayAgo = now - 86400;
 
-    const stats = db
-      .prepare('SELECT * FROM otc_stats WHERE network = ?')
-      .get(network) as OTCStats | undefined;
+    // 计算总订单数
+    const totalOrdersResult = db
+      .prepare('SELECT COUNT(*) as count FROM otc_orders WHERE LOWER(network) = LOWER(?)')
+      .get(network) as { count: number };
+    const totalOrders = totalOrdersResult?.count || 0;
 
-    if (!stats) {
-      return res.json({
-        success: true,
-        data: {
-          totalVolume24h: 0,
-          totalOrders: 0,
-          activeOrders: 0,
-          totalTrades: 0,
-          lastPrice: 0,
-          priceChange24h: 0,
-        },
-      });
-    }
+    // 计算活跃订单数（open 和 partial 状态）
+    const activeOrdersResult = db
+      .prepare('SELECT COUNT(*) as count FROM otc_orders WHERE LOWER(network) = LOWER(?) AND (status = ? OR status = ?) AND (expiry_ts = 0 OR expiry_ts > ?)')
+      .get(network, 'open', 'partial', now) as { count: number };
+    const activeOrders = activeOrdersResult?.count || 0;
+
+    // 计算总成交数
+    const totalTradesResult = db
+      .prepare('SELECT COUNT(*) as count FROM otc_fills WHERE LOWER(network) = LOWER(?)')
+      .get(network) as { count: number };
+    const totalTrades = totalTradesResult?.count || 0;
+
+    // 计算24小时成交数
+    const trades24hResult = db
+      .prepare('SELECT COUNT(*) as count FROM otc_fills WHERE LOWER(network) = LOWER(?) AND filled_at >= ?')
+      .get(network, oneDayAgo) as { count: number };
+    const trades24h = trades24hResult?.count || 0;
+
+    // 计算24小时成交量（USDT）
+    const volume24hResult = db
+      .prepare('SELECT SUM(quote_amount) as volume FROM otc_fills WHERE LOWER(network) = LOWER(?) AND filled_at >= ?')
+      .get(network, oneDayAgo) as { volume: number | null };
+    const totalVolume24h = volume24hResult?.volume || 0;
+
+    // 获取最新成交价格
+    const lastFill = db
+      .prepare('SELECT price FROM otc_fills WHERE LOWER(network) = LOWER(?) ORDER BY filled_at DESC LIMIT 1')
+      .get(network) as { price: number } | undefined;
+    const lastPrice = lastFill?.price || 0;
+
+    // 计算24小时价格变化
+    const firstFill24h = db
+      .prepare('SELECT price FROM otc_fills WHERE LOWER(network) = LOWER(?) AND filled_at >= ? ORDER BY filled_at ASC LIMIT 1')
+      .get(network, oneDayAgo) as { price: number } | undefined;
+    const priceChange24h = firstFill24h && lastPrice 
+      ? ((lastPrice - firstFill24h.price) / firstFill24h.price) * 100 
+      : 0;
 
     res.json({
       success: true,
       data: {
-        totalVolume24h: stats.volume_24h || 0,
-        totalOrders: stats.active_orders || 0,
-        activeOrders: stats.active_orders || 0,
-        totalTrades: stats.trades_24h || 0,
-        lastPrice: stats.last_price || 0,
-        priceChange24h: stats.price_change_24h || 0,
+        totalVolume24h: parseFloat(totalVolume24h.toFixed(2)),
+        totalOrders,
+        activeOrders,
+        totalTrades,
+        lastPrice: parseFloat(lastPrice.toFixed(4)),
+        priceChange24h: parseFloat(priceChange24h.toFixed(2)),
       },
     });
   } catch (error) {
@@ -508,9 +542,27 @@ router.post('/fills', (req: Request, res: Response) => {
       now
     );
 
-    // 更新订单状态
-    db.prepare('UPDATE otc_orders SET status = ?, updated_at = ? WHERE order_id = ?')
-      .run('filled', now, orderId);
+    // 计算新的剩余数量
+    const currentRemaining = parseFloat(order.amount_remaining || order.amount_sell || order.amount_buy);
+    const fillAmountFloat = parseFloat(baseAmount);
+    const newRemaining = Math.max(0, currentRemaining - fillAmountFloat);
+    
+    // 根据剩余数量决定订单状态
+    const newStatus = newRemaining <= 0.000001 ? 'filled' : 'partial'; // 考虑浮点精度
+    
+    console.log(`📊 [Fill Order] Updating order ${orderId}:`, {
+      currentRemaining,
+      fillAmount: fillAmountFloat,
+      newRemaining,
+      newStatus
+    });
+
+    // 更新订单状态和剩余数量
+    db.prepare(`
+      UPDATE otc_orders 
+      SET status = ?, amount_remaining = ?, updated_at = ? 
+      WHERE order_id = ?
+    `).run(newStatus, newRemaining.toString(), now, orderId);
 
     // 更新用户统计
     updateUserStats(order.maker_address, network, 'order_filled');
@@ -518,7 +570,12 @@ router.post('/fills', (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      data: { orderId, status: 'filled' },
+      data: { 
+        orderId, 
+        status: newStatus,
+        remainingAmount: newRemaining.toString(),
+        filledAmount: fillAmountFloat.toString()
+      },
     });
   } catch (error) {
     console.error('❌ 记录成交失败:', error);
