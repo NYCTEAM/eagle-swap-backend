@@ -76,6 +76,63 @@ class OTCSync {
     console.log(`✅ [OTC Sync] Event listeners started for ${this.network}`);
   }
 
+  // 更新用户统计
+  private updateUserStats(address: string, action: string) {
+    try {
+      const now = Math.floor(Date.now() / 1000);
+      const network = this.network;
+
+      // 检查是否存在统计记录
+      const existing = db
+        .prepare('SELECT * FROM otc_user_stats WHERE user_address = ? AND network = ?')
+        .get(address.toLowerCase(), network);
+
+      if (!existing) {
+        // 创建新记录
+        db.prepare(`
+          INSERT INTO otc_user_stats (
+            user_address, network, orders_created, orders_filled,
+            orders_cancelled, orders_taken, volume_as_maker,
+            volume_as_taker, total_volume, total_trades,
+            first_trade_at, last_trade_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          address.toLowerCase(),
+          network,
+          action === 'order_created' ? 1 : 0,
+          action === 'order_filled' ? 1 : 0,
+          action === 'order_cancelled' ? 1 : 0,
+          action === 'order_taken' ? 1 : 0,
+          0, 0, 0, 0,
+          now,
+          now
+        );
+      } else {
+        // 更新现有记录
+        let updateQuery = 'UPDATE otc_user_stats SET last_trade_at = ?';
+        const params: any[] = [now];
+
+        if (action === 'order_created') {
+          updateQuery += ', orders_created = orders_created + 1';
+        } else if (action === 'order_filled') {
+          updateQuery += ', orders_filled = orders_filled + 1';
+        } else if (action === 'order_cancelled') {
+          updateQuery += ', orders_cancelled = orders_cancelled + 1';
+        } else if (action === 'order_taken') {
+          updateQuery += ', orders_taken = orders_taken + 1';
+        }
+
+        updateQuery += ' WHERE user_address = ? AND network = ?';
+        params.push(address.toLowerCase(), network);
+
+        db.prepare(updateQuery).run(...params);
+      }
+      console.log(`   📊 Stats updated for ${address} (${action})`);
+    } catch (error) {
+      console.error('❌ Failed to update user stats:', error);
+    }
+  }
+
   // 处理订单创建事件
   private async handleOrderCreated(orderId: bigint, event: any) {
     const orderData = await this.contract.orders(orderId);
@@ -135,6 +192,9 @@ class OTCSync {
     );
 
     console.log(`   ✅ Order ${orderId} saved: ${side} ${baseAmount} EAGLE @ ${price} USDT`);
+    
+    // 更新 maker 统计
+    this.updateUserStats(orderData[2].toLowerCase(), 'order_created');
   }
 
   // 处理订单成交事件
@@ -198,10 +258,17 @@ class OTCSync {
 
     console.log(`   ✅ Fill recorded: ${baseAmount} EAGLE @ ${order.price_usdt} USDT = ${quoteAmount} USDT`);
     console.log(`   📊 Order status: ${newStatus}, remaining: ${remaining} EAGLE`);
+    
+    // 更新统计: Maker (Filled), Taker (Taken)
+    this.updateUserStats(order.maker_address, 'order_filled');
+    this.updateUserStats(taker.toLowerCase(), 'order_taken');
   }
 
   // 处理订单取消事件
   private async handleOrderCancelled(orderId: bigint, event: any) {
+    // 获取订单信息以更新 Maker 统计
+    const order = db.prepare('SELECT maker_address FROM otc_orders WHERE order_id = ?').get(orderId.toString());
+    
     const updateStmt = db.prepare(`
       UPDATE otc_orders 
       SET status = 'cancelled', updated_at = ? 
@@ -214,6 +281,10 @@ class OTCSync {
     );
 
     console.log(`   ✅ Order ${orderId} marked as cancelled`);
+    
+    if (order) {
+      this.updateUserStats(order.maker_address, 'order_cancelled');
+    }
   }
 
   // 停止监听
