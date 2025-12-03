@@ -313,12 +313,12 @@ router.get('/stats', (req: Request, res: Response) => {
     res.json({
       success: true,
       data: {
-        totalVolume24h: parseFloat(totalVolume24h.toFixed(2)),
+        totalVolume24h: totalVolume24h ? parseFloat(totalVolume24h.toFixed(2)) : 0,
         totalOrders,
         activeOrders,
         totalTrades,
-        lastPrice: parseFloat(lastPrice.toFixed(4)),
-        priceChange24h: parseFloat(priceChange24h.toFixed(2)),
+        lastPrice: lastPrice ? parseFloat(lastPrice.toFixed(4)) : 0,
+        priceChange24h: priceChange24h ? parseFloat(priceChange24h.toFixed(2)) : 0,
       },
     });
   } catch (error) {
