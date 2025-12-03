@@ -355,6 +355,7 @@ router.post('/orders', (req: Request, res: Response) => {
   try {
     const {
       orderId,
+      type, // 'buy' | 'sell'
       maker,
       baseToken,
       quoteToken,
@@ -369,7 +370,7 @@ router.post('/orders', (req: Request, res: Response) => {
     } = req.body;
 
     // 验证必填字段
-    if (!orderId || !maker || !baseToken || !quoteToken || !baseAmount || !quoteAmount || !network || !txHash) {
+    if (!orderId || !type || !maker || !baseToken || !quoteToken || !baseAmount || !quoteAmount || !network || !txHash) {
       return res.status(400).json({
         success: false,
         error: 'Missing required fields',
@@ -378,32 +379,56 @@ router.post('/orders', (req: Request, res: Response) => {
 
     const now = Math.floor(Date.now() / 1000);
 
+    // 确定买卖方向和代币对应关系
+    // 注意：前端传来的 amount 都是 Wei 单位
+    // 为了数据库存储方便（类型为 REAL），我们直接存储 Wei 值
+    // 虽然 REAL 可能有精度问题，但仅用于排序和显示，实际交易走链上
+    let tokenSell, tokenBuy, amountSell, amountBuy;
+
+    if (type === 'buy') {
+      // 买入 EAGLE (Base)，支付 USDT (Quote)
+      tokenSell = quoteToken;
+      tokenBuy = baseToken;
+      amountSell = quoteAmount;
+      amountBuy = baseAmount;
+    } else {
+      // 卖出 EAGLE (Base)，获得 USDT (Quote)
+      tokenSell = baseToken;
+      tokenBuy = quoteToken;
+      amountSell = baseAmount;
+      amountBuy = quoteAmount;
+    }
+
     // 插入订单记录
     const stmt = db.prepare(`
       INSERT INTO otc_orders (
-        order_id, maker_address, base_token, quote_token,
-        base_amount, quote_amount, price, status,
-        network, chain_id, tx_hash, block_number,
-        expiry_ts, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        order_id, maker_address, side, 
+        token_sell, token_buy,
+        amount_sell, amount_buy, amount_remaining,
+        price_usdt, status,
+        created_at, expiry_ts, updated_at,
+        network, chain_id, tx_hash, contract_address
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
       orderId,
       maker.toLowerCase(),
-      baseToken.toLowerCase(),
-      quoteToken.toLowerCase(),
-      baseAmount,
-      quoteAmount,
+      type,
+      tokenSell.toLowerCase(),
+      tokenBuy.toLowerCase(),
+      amountSell,
+      amountBuy,
+      amountSell, // 初始剩余数量 = 出售数量
       price,
       'open',
+      now,
+      expiryTs,
+      now,
       network,
       chainId,
       txHash,
-      blockNumber || 0,
-      expiryTs,
-      now,
-      now
+      null // contract_address (可选)
     );
 
     // 更新用户统计
