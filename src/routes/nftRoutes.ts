@@ -136,6 +136,12 @@ router.get('/user/:address', (req, res) => {
       const rawWeight = nft.weight || nft.effective_weight || 1;
       const displayWeight = rawWeight >= 100 ? rawWeight / 1000 : rawWeight / 10;
       
+      // 根据链的 USDT 小数位转换价格
+      // X Layer (196): 6 decimals, BSC (56): 18 decimals
+      const chainId = nft.chain_id || 196;
+      const usdtDecimals = chainId === 56 ? 18 : 6;
+      const listingPriceUSDT = nft.listing_price ? Number(nft.listing_price) / Math.pow(10, usdtDecimals) : 0;
+      
       return {
         token_id: nft.global_token_id || nft.token_id,
         owner_address: nft.owner_address,
@@ -153,10 +159,10 @@ router.get('/user/:address', (req, res) => {
         payment_method: nft.payment_method || 'USDT',
         purchase_time: new Date((nft.minted_at || 0) * 1000).toISOString(),
         created_at: nft.created_at,
-        chain_id: nft.chain_id,
+        chain_id: chainId,
         chain_name: nft.chain_name,
         is_listed: nft.is_listed === 1, // 转换为布尔值
-        listing_price: (nft.listing_price || 0) / 1000000 // 转换为美元（6位小数）
+        listing_price: listingPriceUSDT
       };
     });
 
