@@ -136,8 +136,14 @@ router.get('/user/:address', (req, res) => {
       price_usdt: nft.price_usdt / 1000000, // 转换为美元（6位小数）
       effective_weight: nft.effective_weight || nft.weight,
       weight: nft.weight,
+      power: nft.weight || 0, // 兼容前端字段名
+      stage: nft.stage || 1,
+      difficulty_multiplier: 1.0, // 默认值，稍后可以从 stage 计算
+      total_earned: 0, // 暂时为 0
+      pending_rewards: 0, // 暂时为 0
       minted_at: nft.minted_at,
       payment_method: nft.payment_method || 'USDT',
+      purchase_time: new Date((nft.minted_at || 0) * 1000).toISOString(),
       created_at: nft.created_at,
       chain_id: nft.chain_id,
       chain_name: nft.chain_name,
