@@ -12,20 +12,41 @@ const router = express.Router();
  */
 router.get('/levels', (req, res) => {
   try {
-    // 从新的简化NFT同步服务获取数据（速度快，实时同步）
-    const inventory = simpleNftSync.getInventory();
+    // 尝试从全局共享库存表读取（多链共享）
+    let inventory: any[];
+    let globalStats: any = null;
+    
+    try {
+      inventory = db.prepare(`
+        SELECT * FROM nft_global_inventory ORDER BY level
+      `).all();
+      
+      // 计算全局统计
+      const stats = db.prepare(`
+        SELECT 
+          SUM(total_supply) as total_supply,
+          SUM(minted) as total_minted,
+          SUM(available) as total_available
+        FROM nft_global_inventory
+      `).get();
+      
+      globalStats = stats;
+    } catch (e) {
+      // 如果没有全局表，回退到旧的 simpleNftSync
+      inventory = simpleNftSync.getInventory();
+    }
     
     // 转换为前端期望的格式（兼容旧API）
     const levels = inventory.map((item: any) => ({
       level: item.level,
-      name: item.name,
-      weight: item.weight,
+      name: item.level_name || item.name,
+      weight: item.mining_power || item.weight,
       price_usdt: item.price_usdt,
       price_eth: 0, // 暂不支持ETH支付
-      supply: item.total_supply,
+      total_supply: item.total_supply,
       minted: item.minted,
       available: item.available,
-      description: `${item.name} - Mining Weight: ${item.weight}x`,
+      description: `${item.level_name || item.name} - Mining Weight: ${item.mining_power || item.weight}x`,
       sold_percentage: item.total_supply > 0 
         ? Math.round((item.minted * 100.0) / item.total_supply * 100) / 100 
         : 0
@@ -33,7 +54,8 @@ router.get('/levels', (req, res) => {
 
     res.json({
       success: true,
-      data: levels
+      data: levels,
+      global_stats: globalStats // 添加全局统计
     });
   } catch (error: any) {
     console.error('❌ Error fetching NFT levels:', error);
