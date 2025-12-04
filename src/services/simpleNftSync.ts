@@ -28,9 +28,9 @@ class SimpleNFTSync {
       "function tokenURI(uint256 tokenId) view returns (string)"
     ];
 
-    // 初始化NFT合约
+    // 初始化NFT合约 (Multi-Chain Global)
     this.contract = new ethers.Contract(
-      process.env.NFT_CONTRACT_ADDRESS || '0x8d3FBe540CBe8189333A1758cE3801067A023809',
+      process.env.NFT_CONTRACT_ADDRESS || '0xfe016c9A9516AcB14d504aE821C46ae2bc968cd7',
       nftABI,
       this.provider
     );

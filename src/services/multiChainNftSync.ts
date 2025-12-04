@@ -16,14 +16,14 @@ const CHAIN_CONFIGS: ChainConfig[] = [
     chainId: 196,
     chainName: 'X Layer',
     rpcUrl: process.env.XLAYER_RPC_URL || 'https://rpc.xlayer.tech',
-    nftAddress: process.env.XLAYER_NFT_ADDRESS || '0x8d3FBe540CBe8189333A1758cE3801067A023809',
+    nftAddress: process.env.XLAYER_NFT_ADDRESS || '0xfe016c9A9516AcB14d504aE821C46ae2bc968cd7', // Multi-Chain Global
     startBlock: 0
   },
   {
     chainId: 56,
     chainName: 'BSC',
     rpcUrl: process.env.BSC_RPC_URL || 'https://bsc-dataseed.binance.org',
-    nftAddress: process.env.BSC_NFT_ADDRESS || '0xB6966D11898D7c6bC0cC942C013e314e2b4C4d15',
+    nftAddress: process.env.BSC_NFT_ADDRESS || '0xc0a4ab40306FD77abB8Ccd376876b276423d40af', // Multi-Chain Global
     startBlock: 0
   }
 ];
