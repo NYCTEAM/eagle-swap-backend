@@ -320,10 +320,10 @@ export class SwapMiningService {
       }
       
       // 计算加成:
-      // - VIP Boost: 基础 100% + VIP 等级加成
-      // - NFT Boost: 只有持有 NFT 时才有加成，否则为 0%
-      // - Combined Boost: VIP Boost + NFT Boost (额外部分)
-      const nftBoostPercentage = hasNft ? (nftMultiplier - 1) * 100 : 0; // 没有 NFT = 0%
+      // - VIP Boost: 基础 100% + VIP 等级加成 (例如 Bronze = 100%)
+      // - NFT Boost: NFT 总倍数百分比 (例如 1.05x = 105%)
+      // - Combined Boost: VIP Boost + NFT Boost (例如 100% + 105% = 205%)
+      const nftBoostPercentage = hasNft ? nftMultiplier * 100 : 0; // NFT 总倍数百分比
       const combinedBoost = tier.boost_percentage + nftBoostPercentage;
       
       return {
@@ -703,8 +703,8 @@ export class SwapMiningService {
           nftMultiplier = topNft.bonus_multiplier || 1.0;
         }
         
-        // NFT 加成转换为百分比 (1.05 = 105%, 1.20 = 120%)
-        const nftBoostPercentage = nftMultiplier * 100;
+        // NFT 加成转换为百分比 (1.05 = 105%, 1.20 = 120%, 没有NFT = 0%)
+        const nftBoostPercentage = topNft ? nftMultiplier * 100 : 0;
         
         nftData = {
           nft_level: nftLevel,
@@ -717,7 +717,8 @@ export class SwapMiningService {
       }
       
       // 5. 计算总加成 (VIP百分比 + NFT百分比)
-      const nftBoostPercentage = nftMultiplier * 100;
+      // 如果没有 NFT (nftLevel = 0)，NFT 加成为 0%
+      const nftBoostPercentage = nftLevel > 0 ? nftMultiplier * 100 : 0;
       const totalBoost = currentVip.boost_percentage + nftBoostPercentage;
       const totalMultiplier = totalBoost / 100; // 转换为倍数用于计算奖励
 

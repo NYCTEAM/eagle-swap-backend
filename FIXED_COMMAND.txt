@@ -1,0 +1,96 @@
+========================================
+修复版本 - 一键创建 Swap Mining 表
+========================================
+
+复制下面的命令到服务器执行：
+
+docker exec -it hocg04o8swccwggwc8kosc8g-133057446453 node -e "
+const Database = require('better-sqlite3');
+const path = require('path');
+const fs = require('fs');
+
+console.log('🔧 [Swap Mining] 修复数据库表\n');
+
+const possibleDbPaths = [
+  path.join(process.cwd(), 'data/eagleswap.db'),
+  '/app/data/eagleswap.db',
+  './data/eagleswap.db'
+];
+
+let dbPath = '';
+for (const p of possibleDbPaths) {
+  if (fs.existsSync(p)) {
+    dbPath = p;
+    break;
+  }
+}
+
+if (!dbPath) {
+  console.error('❌ 数据库文件未找到！');
+  process.exit(1);
+}
+
+console.log('✅ 使用数据库:', dbPath);
+const db = new Database(dbPath);
+
+try {
+  console.log('\n📊 检查现有表...');
+  const tables = db.prepare('SELECT name FROM sqlite_master WHERE type=\"table\" ORDER BY name').all();
+  console.log('找到', tables.length, '个表');
+  
+  const swapMiningTables = ['user_claim_nonce', 'user_swap_stats', 'swap_transactions'];
+  const existingTables = tables.map(t => t.name);
+  
+  swapMiningTables.forEach(tableName => {
+    const exists = existingTables.includes(tableName);
+    console.log('  -', tableName + ':', exists ? '✅ 存在' : '❌ 缺失');
+  });
+  
+  console.log('\n🔨 创建 user_claim_nonce 表...');
+  db.exec('CREATE TABLE IF NOT EXISTS user_claim_nonce (user_address TEXT PRIMARY KEY, nonce INTEGER NOT NULL DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_user_claim_nonce_address ON user_claim_nonce(user_address)');
+  console.log('✅ user_claim_nonce 表已创建');
+  
+  console.log('\n🔨 创建 user_swap_stats 表...');
+  db.exec('CREATE TABLE IF NOT EXISTS user_swap_stats (user_address TEXT PRIMARY KEY, total_trades INTEGER DEFAULT 0, total_volume_usdt REAL DEFAULT 0, total_fee_paid REAL DEFAULT 0, total_eagle_earned REAL DEFAULT 0, total_eagle_claimed REAL DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_user_swap_stats_address ON user_swap_stats(user_address)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_user_swap_stats_volume ON user_swap_stats(total_volume_usdt)');
+  console.log('✅ user_swap_stats 表已创建');
+  
+  console.log('\n🔨 创建 swap_transactions 表...');
+  db.exec('CREATE TABLE IF NOT EXISTS swap_transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, tx_hash TEXT UNIQUE NOT NULL, user_address TEXT NOT NULL, from_token TEXT NOT NULL, to_token TEXT NOT NULL, from_amount TEXT, to_amount TEXT, trade_value_usdt REAL DEFAULT 0, eagle_reward REAL DEFAULT 0, chain_id INTEGER NOT NULL, route_info TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_swap_tx_user ON swap_transactions(user_address)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_swap_tx_hash ON swap_transactions(tx_hash)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_swap_tx_chain ON swap_transactions(chain_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_swap_tx_created ON swap_transactions(created_at)');
+  console.log('✅ swap_transactions 表已创建');
+  
+  console.log('\n📋 验证表结构:');
+  swapMiningTables.forEach(tableName => {
+    const exists = db.prepare('SELECT name FROM sqlite_master WHERE type=\"table\" AND name=?').get(tableName);
+    if (exists) {
+      const count = db.prepare('SELECT COUNT(*) as count FROM ' + tableName).get();
+      console.log('  ✅', tableName + ':', count.count, '条记录');
+    }
+  });
+  
+  console.log('\n🧪 测试数据库操作...');
+  const testAddress = '0x0000000000000000000000000000000000000001';
+  db.prepare('INSERT OR IGNORE INTO user_claim_nonce (user_address, nonce) VALUES (?, 0)').run(testAddress);
+  const testRecord = db.prepare('SELECT * FROM user_claim_nonce WHERE user_address = ?').get(testAddress);
+  
+  if (testRecord) {
+    console.log('✅ 数据库读写测试成功');
+    db.prepare('DELETE FROM user_claim_nonce WHERE user_address = ?').run(testAddress);
+  }
+  
+  db.close();
+  console.log('\n✅ 数据库修复完成！');
+  console.log('🚀 现在可以测试 Swap Mining 提取功能了');
+  
+} catch (error) {
+  console.error('\n❌ 错误:', error.message);
+  db.close();
+  process.exit(1);
+}
+"
