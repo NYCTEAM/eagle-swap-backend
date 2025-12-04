@@ -41,7 +41,10 @@ class OTCSync {
 
   // 启动事件监听
   async start() {
-    console.log(`🚀 [OTC Sync] Starting event listeners for ${this.network}...`);
+    console.log(`🚀 [OTC Sync] Starting for ${this.network}...`);
+    
+    // 先同步历史订单
+    await this.syncHistoricalOrders();
     
     // 监听 OrderCreated 事件
     this.contract.on('OrderCreated', async (orderId, pairId, maker, orderType, price, baseAmount, event) => {
@@ -74,6 +77,43 @@ class OTCSync {
     });
 
     console.log(`✅ [OTC Sync] Event listeners started for ${this.network}`);
+  }
+  
+  // 同步历史订单
+  async syncHistoricalOrders() {
+    console.log(`📜 [OTC Sync] Syncing historical orders for ${this.network}...`);
+    
+    try {
+      // 获取最近的区块范围（最近10000个区块）
+      const currentBlock = await this.provider.getBlockNumber();
+      const fromBlock = Math.max(0, currentBlock - 10000);
+      
+      console.log(`   Scanning blocks ${fromBlock} to ${currentBlock}...`);
+      
+      // 查询 OrderCreated 事件
+      const filter = this.contract.filters.OrderCreated();
+      const events = await this.contract.queryFilter(filter, fromBlock, currentBlock);
+      
+      console.log(`   Found ${events.length} OrderCreated events`);
+      
+      for (const event of events) {
+        try {
+          const orderId = (event as any).args[0];
+          
+          // 检查订单是否已存在
+          const existing = db.prepare('SELECT order_id FROM otc_orders WHERE order_id = ?').get(orderId.toString());
+          if (!existing) {
+            await this.handleOrderCreated(orderId, event);
+          }
+        } catch (e) {
+          console.error(`   Error processing event:`, e);
+        }
+      }
+      
+      console.log(`✅ [OTC Sync] Historical sync completed for ${this.network}`);
+    } catch (error) {
+      console.error(`❌ [OTC Sync] Historical sync failed for ${this.network}:`, error);
+    }
   }
 
   // 更新用户统计
@@ -305,11 +345,11 @@ export function startOTCSync() {
     xlayerSync.start();
   }
 
-  // 可选：启动 BSC 同步
-  // if (!bscSync) {
-  //   bscSync = new OTCSync(56);
-  //   bscSync.start();
-  // }
+  // 启动 BSC 同步
+  if (!bscSync) {
+    bscSync = new OTCSync(56);
+    bscSync.start();
+  }
 }
 
 export function stopOTCSync() {
@@ -322,5 +362,9 @@ export function stopOTCSync() {
     bscSync = null;
   }
 }
+
+// 导出单独的实例供 app.ts 使用
+export const otcSyncXLayer = new OTCSync(196);
+export const otcSyncBSC = new OTCSync(56);
 
 export { OTCSync };

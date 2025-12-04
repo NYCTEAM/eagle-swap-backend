@@ -11,6 +11,7 @@ import { logger, logRequest } from './utils/logger';
 import { simpleNftSync } from './services/simpleNftSync';
 import { multiChainNftSync } from './services/multiChainNftSync';
 import { marketplaceSyncService } from './services/marketplaceSyncService';
+import { otcSyncXLayer, otcSyncBSC } from './services/otcSync';
 
 // Import routes
 import tokensRouter from './routes/tokens';
@@ -205,6 +206,16 @@ const initializeApp = async () => {
     // 启动 Marketplace 同步服务
     marketplaceSyncService.start(30000); // 每30秒同步一次
     logger.info('Marketplace sync service started successfully');
+    
+    // 启动 OTC 同步服务
+    try {
+      await otcSyncXLayer.start();
+      logger.info('OTC sync service started for X Layer');
+      await otcSyncBSC.start();
+      logger.info('OTC sync service started for BSC');
+    } catch (error) {
+      logger.warn('OTC sync service failed to start', { error });
+    }
     
     // 启动Bridge Relayer服务
     if (process.env.RELAYER_PRIVATE_KEY) {
