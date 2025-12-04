@@ -831,8 +831,9 @@ export class SwapMiningService {
       const totalClaimed = rewardData?.total_claimed || 0;
       const pendingReward = totalEarned - totalClaimed;
 
-      // 8. 计算示例奖励 (基础奖励 * 总倍数)
-      const rewardPer100Usdt = baseRate * totalMultiplier;
+      // 8. 计算示例奖励 (交易额 * 基础奖励率 * 总倍数)
+      // 公式: $100 × baseRate × totalMultiplier = 100 × 0.0003 × 2.05 = 0.0615 EAGLE
+      const rewardPer100Usdt = baseAmount * baseRate * totalMultiplier;
 
       return {
         success: true,
