@@ -84,33 +84,47 @@ class OTCSync {
     console.log(`📜 [OTC Sync] Syncing historical orders for ${this.network}...`);
     
     try {
-      // 获取最近的区块范围（最近10000个区块）
       const currentBlock = await this.provider.getBlockNumber();
       const fromBlock = Math.max(0, currentBlock - 10000);
+      const BATCH_SIZE = 100; // 每批扫描100个区块
       
-      console.log(`   Scanning blocks ${fromBlock} to ${currentBlock}...`);
+      console.log(`   Scanning blocks ${fromBlock} to ${currentBlock} (batch size: ${BATCH_SIZE})...`);
       
-      // 查询 OrderCreated 事件
-      const filter = this.contract.filters.OrderCreated();
-      const events = await this.contract.queryFilter(filter, fromBlock, currentBlock);
+      let totalEvents = 0;
       
-      console.log(`   Found ${events.length} OrderCreated events`);
-      
-      for (const event of events) {
+      // 分批扫描，每批100个区块，每批之间等待1秒
+      for (let start = fromBlock; start < currentBlock; start += BATCH_SIZE) {
+        const end = Math.min(start + BATCH_SIZE - 1, currentBlock);
+        
         try {
-          const orderId = (event as any).args[0];
+          const filter = this.contract.filters.OrderCreated();
+          const events = await this.contract.queryFilter(filter, start, end);
           
-          // 检查订单是否已存在
-          const existing = db.prepare('SELECT order_id FROM otc_orders WHERE order_id = ?').get(orderId.toString());
-          if (!existing) {
-            await this.handleOrderCreated(orderId, event);
+          for (const event of events) {
+            try {
+              const orderId = (event as any).args[0];
+              
+              // 检查订单是否已存在
+              const existing = db.prepare('SELECT order_id FROM otc_orders WHERE order_id = ?').get(orderId.toString());
+              if (!existing) {
+                await this.handleOrderCreated(orderId, event);
+                totalEvents++;
+              }
+            } catch (e) {
+              console.error(`   Error processing event:`, e);
+            }
+          }
+          
+          // 每批之间等待1秒，避免RPC限流
+          if (end < currentBlock) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
           }
         } catch (e) {
-          console.error(`   Error processing event:`, e);
+          console.error(`   Error scanning blocks ${start}-${end}:`, e);
         }
       }
       
-      console.log(`✅ [OTC Sync] Historical sync completed for ${this.network}`);
+      console.log(`✅ [OTC Sync] Historical sync completed for ${this.network}, synced ${totalEvents} new orders`);
     } catch (error) {
       console.error(`❌ [OTC Sync] Historical sync failed for ${this.network}:`, error);
     }
