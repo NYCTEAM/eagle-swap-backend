@@ -43,17 +43,38 @@ export class SwapMiningService {
       let nftLevel = 0;
       
       if (config.nft_bonus_enabled) {
-        // 查询用户最高等级 NFT 的固定倍数 (从 user_nfts + nft_level_bonus 表)
-        const topNft = db.prepare(`
-          SELECT 
-            n.level,
-            nb.bonus_multiplier
-          FROM user_nfts n
-          LEFT JOIN nft_level_bonus nb ON n.level = nb.nft_level
-          WHERE n.owner_address = ?
-          ORDER BY n.level DESC
-          LIMIT 1
-        `).get(params.userAddress.toLowerCase()) as any;
+        // 查询用户最高等级 NFT 的固定倍数 (从 nft_holders + nft_level_bonus 表)
+        // 注意：如果没有 nft_level_bonus 表，我们使用 nft_level_stats 中的 weight 作为基础，或者默认倍数
+        // 这里假设 nft_level_bonus 仍然用于存储具体的挖矿倍数配置
+        
+        let topNft: any = null;
+        
+        try {
+          // 尝试从 nft_holders 读取
+          topNft = db.prepare(`
+            SELECT 
+              n.level,
+              nb.bonus_multiplier
+            FROM nft_holders n
+            LEFT JOIN nft_level_bonus nb ON n.level = nb.nft_level
+            WHERE LOWER(n.owner_address) = LOWER(?)
+            ORDER BY n.level DESC
+            LIMIT 1
+          `).get(params.userAddress);
+        } catch (e) {
+          // 如果查询失败（例如表不存在），回退到旧表
+          console.warn('Failed to query nft_holders for mining bonus, falling back to user_nfts:', e);
+          topNft = db.prepare(`
+            SELECT 
+              n.level,
+              nb.bonus_multiplier
+            FROM user_nfts n
+            LEFT JOIN nft_level_bonus nb ON n.level = nb.nft_level
+            WHERE LOWER(n.owner_address) = LOWER(?)
+            ORDER BY n.level DESC
+            LIMIT 1
+          `).get(params.userAddress.toLowerCase());
+        }
         
         if (topNft && topNft.bonus_multiplier) {
           nftLevel = topNft.level;

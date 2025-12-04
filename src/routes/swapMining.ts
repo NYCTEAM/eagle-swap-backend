@@ -85,13 +85,34 @@ router.get('/user-stats/:address', async (req, res) => {
     // 获取用户统计数据
     const result = swapMiningService.getUserStats(address);
     
-    // 获取用户NFT数据
-    const { simpleNftSync } = await import('../services/simpleNftSync');
-    const userNFTs = simpleNftSync.getUserNFTs(address);
+    // 获取用户NFT数据 - 使用新的 nft_holders 表
+    const { db } = await import('../database');
+    
+    let userNFTs = [];
+    try {
+      userNFTs = db.prepare(`
+        SELECT h.*, l.level_name, l.weight
+        FROM nft_holders h
+        LEFT JOIN nft_level_stats l ON h.level = l.level
+        WHERE LOWER(h.owner_address) = LOWER(?)
+        ORDER BY h.level DESC
+      `).all(address);
+    } catch (e) {
+      console.error('Error reading from nft_holders in swapMining:', e);
+      // Fallback
+      const { simpleNftSync } = await import('../services/simpleNftSync');
+      userNFTs = simpleNftSync.getUserNFTs(address);
+    }
     
     // 添加NFT数据到响应中（使用类型断言避免TypeScript错误）
     if (result.success && result.data) {
-      (result.data as any).owned_nfts = userNFTs;
+      (result.data as any).owned_nfts = userNFTs.map((nft: any) => ({
+        token_id: nft.global_token_id || nft.token_id,
+        level: nft.level,
+        name: nft.level_name || nft.name,
+        weight: nft.weight || 0,
+        minted_at: nft.minted_at
+      }));
       (result.data as any).nft_count = userNFTs.length;
       (result.data as any).total_nft_weight = userNFTs.reduce((sum: number, nft: any) => sum + (nft.weight || 0), 0);
     }
