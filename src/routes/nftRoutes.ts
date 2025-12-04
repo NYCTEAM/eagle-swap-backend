@@ -39,7 +39,7 @@ router.get('/levels', (req, res) => {
       level: item.level,
       name: item.level_name || item.name,
       weight: item.weight || item.mining_power,
-      price_usdt: item.price_usdt,
+      price_usdt: item.price_usdt / 1000000, // 转换为美元（6位小数）
       price_eth: 0, // 暂不支持ETH支付
       total_supply: item.total_supply,
       minted: item.minted || 0,
@@ -133,7 +133,7 @@ router.get('/user/:address', (req, res) => {
       owner_address: nft.owner_address,
       level: nft.level,
       level_name: nft.level_name || nft.name,
-      price_usdt: nft.price_usdt,
+      price_usdt: nft.price_usdt / 1000000, // 转换为美元（6位小数）
       effective_weight: nft.effective_weight || nft.weight,
       weight: nft.weight,
       minted_at: nft.minted_at,
@@ -142,7 +142,7 @@ router.get('/user/:address', (req, res) => {
       chain_id: nft.chain_id,
       chain_name: nft.chain_name,
       is_listed: nft.is_listed === 1, // 转换为布尔值
-      listing_price: nft.listing_price || 0
+      listing_price: (nft.listing_price || 0) / 1000000 // 转换为美元（6位小数）
     }));
 
     // 计算总权重
