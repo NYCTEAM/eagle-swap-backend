@@ -419,16 +419,7 @@ export class SwapMiningService {
         };
       }
       
-      // 2. 检查最小领取数量
-      const minClaimAmount = parseFloat(process.env.MIN_CLAIM_AMOUNT || '1.0');
-      if (pendingRewards < minClaimAmount) {
-        return {
-          success: false,
-          error: `Minimum claim amount is ${minClaimAmount} EAGLE`
-        };
-      }
-      
-      // 3. 获取签名配置
+      // 2. 获取签名配置 (无最小提取限制，用户支付 Gas)
       const signerPrivateKey = process.env.SIGNER_PRIVATE_KEY;
       const contractAddress = process.env.SWAP_MINING_REWARDS_ADDRESS;
       const chainId = parseInt(process.env.XLAYER_CHAIN_ID || '196');
