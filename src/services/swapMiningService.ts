@@ -262,16 +262,20 @@ export class SwapMiningService {
           WHERE user_address = ? AND claimed = 0
         `).get(normalizedAddress) as any;
         
-        // 方案2: 如果 swap_mining_rewards 表为空,直接使用 total_eagle_earned
+        // 方案2: 如果 swap_mining_rewards 表为空,计算 total_eagle_earned - total_eagle_claimed
         if (pending?.total > 0) {
           pendingRewards = pending.total;
         } else {
-          // 所有已获得的奖励都是待领取的(因为 total_eagle_claimed = 0)
-          pendingRewards = stats?.total_eagle_earned || 0;
+          // 计算待领取 = 总获得 - 已领取
+          const totalEarned = stats?.total_eagle_earned || 0;
+          const totalClaimed = stats?.total_eagle_claimed || 0;
+          pendingRewards = Math.max(0, totalEarned - totalClaimed);
         }
       } catch (e) {
-        // 出错时使用 total_eagle_earned 作为待领取奖励
-        pendingRewards = stats?.total_eagle_earned || 0;
+        // 出错时计算 total_eagle_earned - total_eagle_claimed
+        const totalEarned = stats?.total_eagle_earned || 0;
+        const totalClaimed = stats?.total_eagle_claimed || 0;
+        pendingRewards = Math.max(0, totalEarned - totalClaimed);
       }
       
       // 获取用户拥有的 NFT 数量
