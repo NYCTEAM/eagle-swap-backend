@@ -412,9 +412,9 @@ export class SwapMiningService {
       
       // 计算加成:
       // - VIP Boost: 基础 100% + VIP 等级加成 (例如 Bronze = 100%)
-      // - NFT Boost: NFT 总倍数百分比 (例如 1.05x = 105%)
+      // - NFT Boost: NFT 额外加成百分比 (例如 2.05x -> 105%)
       // - Combined Boost: VIP Boost + NFT Boost (例如 100% + 105% = 205%)
-      const nftBoostPercentage = hasNft ? nftMultiplier * 100 : 0; // NFT 总倍数百分比
+      const nftBoostPercentage = hasNft ? (nftMultiplier - 1) * 100 : 0; 
       const combinedBoost = tier.boost_percentage + nftBoostPercentage;
       
       return {
