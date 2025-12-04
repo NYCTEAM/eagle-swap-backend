@@ -79,6 +79,24 @@ export class SwapMiningService {
         if (topNft && topNft.bonus_multiplier) {
           nftLevel = topNft.level;
           nftMultiplier = topNft.bonus_multiplier;
+        } else if (topNft && topNft.level) {
+          // 如果没有找到 bonus_multiplier 但找到了 NFT（说明表数据缺失或使用旧逻辑）
+          // 使用默认逻辑：Weight 1 = 0.1% 加成 (multiplier = 1.001)
+          // 或者根据 Level 计算
+          
+          // 尝试查询该等级的 Weight
+          const levelStat = db.prepare('SELECT weight FROM nft_level_stats WHERE level = ?').get(topNft.level) as any;
+          const weight = levelStat ? levelStat.weight : 1; // 默认 weight 1
+          
+          nftLevel = topNft.level;
+          // 假设每 1 Weight 增加 0.1% 加成
+          const bonusPercent = weight * 0.1; 
+          nftMultiplier = 1 + (bonusPercent / 100);
+          
+          console.log(`Using default NFT bonus calculation: Level ${nftLevel}, Weight ${weight}, Bonus ${bonusPercent}%, Multiplier ${nftMultiplier}`);
+        }
+          
+        if (nftLevel > 0) {
           // NFT 加成：基础奖励 * NFT倍数（不包含VIP，VIP在其他地方计算）
           eagleReward = baseReward * nftMultiplier;
           
@@ -316,13 +334,23 @@ export class SwapMiningService {
       let ownedNfts = [];
       try {
         ownedNfts = db.prepare(`
-          SELECT n.*, i.name as level_name, i.weight as power
-          FROM user_nfts n
-          LEFT JOIN nft_inventory i ON n.level = i.level
-          WHERE n.owner_address = ?
+          SELECT n.*, i.level_name, i.weight as power
+          FROM nft_holders n
+          LEFT JOIN nft_level_stats i ON n.level = i.level
+          WHERE LOWER(n.owner_address) = LOWER(?)
         `).all(normalizedAddress) as any[];
       } catch (e) {
-        ownedNfts = [];
+        // Fallback to old table if new table fails
+        try {
+          ownedNfts = db.prepare(`
+            SELECT n.*, i.name as level_name, i.weight as power
+            FROM user_nfts n
+            LEFT JOIN nft_inventory i ON n.level = i.level
+            WHERE n.owner_address = ?
+          `).all(normalizedAddress) as any[];
+        } catch (e2) {
+          ownedNfts = [];
+        }
       }
       
       // 获取最高等级 NFT 的固定倍数
@@ -330,21 +358,46 @@ export class SwapMiningService {
       let hasNft = false;
       let topNftData = null;
       try {
-        const topNft = db.prepare(`
-          SELECT n.level, i.name as level_name, nb.bonus_multiplier, i.weight
-          FROM user_nfts n
-          LEFT JOIN nft_inventory i ON n.level = i.level
+        // 尝试从 nft_holders 读取
+        let topNft = db.prepare(`
+          SELECT n.level, i.level_name, nb.bonus_multiplier, i.weight
+          FROM nft_holders n
+          LEFT JOIN nft_level_stats i ON n.level = i.level
           LEFT JOIN nft_level_bonus nb ON n.level = nb.nft_level
-          WHERE n.owner_address = ?
+          WHERE LOWER(n.owner_address) = LOWER(?)
           ORDER BY n.level DESC
           LIMIT 1
         `).get(normalizedAddress) as any;
+
+        // 如果新表没数据，尝试旧表
+        if (!topNft) {
+           topNft = db.prepare(`
+            SELECT n.level, i.name as level_name, nb.bonus_multiplier, i.weight
+            FROM user_nfts n
+            LEFT JOIN nft_inventory i ON n.level = i.level
+            LEFT JOIN nft_level_bonus nb ON n.level = nb.nft_level
+            WHERE n.owner_address = ?
+            ORDER BY n.level DESC
+            LIMIT 1
+          `).get(normalizedAddress) as any;
+        }
         
         if (topNft) {
           hasNft = true;
           if (topNft.bonus_multiplier) {
             nftMultiplier = topNft.bonus_multiplier;
+          } else {
+             // 如果没有配置 multiplier, 使用默认逻辑 (例如 1 + weight * 0.001)
+             // 或者根据 Level 1 = 1.05
+             if (topNft.level === 1) nftMultiplier = 1.05;
+             else if (topNft.level === 2) nftMultiplier = 1.2;
+             else if (topNft.level === 3) nftMultiplier = 1.35;
+             else if (topNft.level === 4) nftMultiplier = 1.5;
+             else if (topNft.level === 5) nftMultiplier = 1.7;
+             else if (topNft.level === 6) nftMultiplier = 1.85;
+             else if (topNft.level === 7) nftMultiplier = 2.5;
           }
+          
           topNftData = {
             level: topNft.level,
             tier_name: topNft.level_name || `Level ${topNft.level}`,
