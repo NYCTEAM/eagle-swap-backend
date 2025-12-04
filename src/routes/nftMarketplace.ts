@@ -63,19 +63,27 @@ router.get('/listings', async (req, res) => {
         console.log(`🔍 [API] Found ${listings.length} active listings in database`);
 
         // 映射数据结构
-        const mappedListings = listings.map((l: any) => ({
-            tokenId: l.token_id,
-            seller: l.seller_address || '',
-            price: l.price || 0,
-            level: l.nft_level || 1,
-            levelName: l.level_name || LEVEL_NAMES[(l.nft_level || 1) - 1] || `Level ${l.nft_level}`,
-            stage: 1,
-            finalPower: l.final_power ? l.final_power / 1000 : 0, // 转换 weight
-            basePower: l.final_power ? l.final_power / 1000 : 0,
-            listedAt: l.listed_at,
-            chainId: l.chain_id || 196,
-            chainName: l.chain_name || 'X Layer'
-        }));
+        const mappedListings = listings.map((l: any) => {
+            // 根据链的 USDT 小数位转换价格
+            // X Layer (196): 6 decimals, BSC (56): 18 decimals
+            const chainId = l.chain_id || 196;
+            const usdtDecimals = chainId === 56 ? 18 : 6;
+            const priceInUSDT = l.price ? Number(l.price) / Math.pow(10, usdtDecimals) : 0;
+            
+            return {
+                tokenId: l.token_id,
+                seller: l.seller_address || '',
+                price: priceInUSDT,
+                level: l.nft_level || 1,
+                levelName: l.level_name || LEVEL_NAMES[(l.nft_level || 1) - 1] || `Level ${l.nft_level}`,
+                stage: 1,
+                finalPower: l.final_power ? l.final_power / 1000 : 0, // 转换 weight
+                basePower: l.final_power ? l.final_power / 1000 : 0,
+                listedAt: l.listed_at,
+                chainId: chainId,
+                chainName: l.chain_name || 'X Layer'
+            };
+        });
 
         res.json({
             success: true,
