@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS nft_chain_contracts (
 INSERT OR REPLACE INTO nft_chain_contracts (chain_id, chain_name, contract_address, payment_tokens, is_active, deployed_at)
 VALUES 
     (196, 'X Layer', '0xfe016c9A9516AcB14d504aE821C46ae2bc968cd7', '["USDT", "NATIVE"]', 1, '2025-12-04'),
-    (56, 'BSC', '0xc0a4ab40306FD77abB8Ccd376876b276423d40af', '["USDT", "BNB"]', 1, '2025-12-04'),
+    (56, 'BSC', '0x3c117d186C5055071EfF91d87f2600eaF88D591D', '["USDT", "BNB"]', 1, '2025-12-04'),
     (900, 'Solana', '', '["USDC", "SOL"]', 0, NULL);
 
 -- 2. 全局共享 NFT 库存 (跨链共享总供应量)

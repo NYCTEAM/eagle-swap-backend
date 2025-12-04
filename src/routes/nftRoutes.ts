@@ -374,7 +374,7 @@ router.post('/request-mint', async (req, res) => {
     // 确定合约地址
     const contractAddress = chainId === 196 
       ? process.env.XLAYER_NFT_ADDRESS || '0xfe016c9A9516AcB14d504aE821C46ae2bc968cd7'
-      : process.env.BSC_NFT_ADDRESS || '0xB6966D11898D7c6bC0cC942C013e314e2b4C4d15';
+      : process.env.BSC_NFT_ADDRESS || '0x3c117d186C5055071EfF91d87f2600eaF88D591D';
 
     const chainName = chainId === 196 ? 'X Layer' : chainId === 56 ? 'BSC' : 'Solana';
 
