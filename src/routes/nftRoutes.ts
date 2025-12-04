@@ -1,6 +1,8 @@
 import express from 'express';
 import { db } from '../database';
 import { simpleNftSync } from '../services/simpleNftSync';
+import { NFTTokenManager } from '../services/nftTokenManager.js';
+import { NFTSignatureService } from '../services/nftSignatureService.js';
 
 const router = express.Router();
 
@@ -295,6 +297,300 @@ router.get('/leaderboard', (req, res) => {
       data: leaderboard
     });
   } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * 请求铸造 NFT（新流程 - 签名铸造）
+ * POST /api/nft/request-mint
+ * 
+ * 流程：
+ * 1. 用户请求铸造
+ * 2. 后端分配全局唯一 Token ID
+ * 3. 后端生成签名
+ * 4. 返回铸造参数给前端
+ * 5. 前端调用合约 mintWithSignature
+ */
+router.post('/request-mint', async (req, res) => {
+  try {
+    const { userAddress, level, chainId = 196 } = req.body;
+
+    // 参数验证
+    if (!userAddress) {
+      return res.status(400).json({
+        success: false,
+        error: 'User address is required'
+      });
+    }
+
+    if (!level || level < 1 || level > 7) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid level (must be 1-7)'
+      });
+    }
+
+    // 检查等级是否还有可用供应
+    const isAvailable = NFTTokenManager.checkLevelAvailability(level);
+    if (!isAvailable) {
+      return res.status(400).json({
+        success: false,
+        error: `Level ${level} is sold out`
+      });
+    }
+
+    // 清理过期的预留
+    NFTTokenManager.cleanExpiredReservations();
+
+    // 获取下一个可用的全局 Token ID
+    const globalTokenId = NFTTokenManager.getNextAvailableTokenId();
+
+    // 获取当前总铸造数量（用于计算阶段）
+    const totalMinted = NFTTokenManager.getTotalMinted();
+
+    // 生成签名过期时间（30分钟）
+    const deadline = NFTSignatureService.generateDeadline(30);
+
+    // 确定合约地址
+    const contractAddress = chainId === 196 
+      ? process.env.XLAYER_NFT_ADDRESS || '0xfe016c9A9516AcB14d504aE821C46ae2bc968cd7'
+      : process.env.BSC_NFT_ADDRESS || '0xB6966D11898D7c6bC0cC942C013e314e2b4C4d15';
+
+    const chainName = chainId === 196 ? 'X Layer' : chainId === 56 ? 'BSC' : 'Solana';
+
+    // 预留 Token ID
+    NFTTokenManager.reserveTokenId({
+      globalTokenId,
+      userAddress: userAddress.toLowerCase(),
+      level,
+      chainId,
+      chainName,
+      contractAddress
+    });
+
+    // 生成签名
+    const signature = await NFTSignatureService.generateMintSignature({
+      userAddress,
+      globalTokenId,
+      level,
+      totalMinted,
+      deadline,
+      contractAddress,
+      chainId
+    });
+
+    // 计算当前阶段和效率
+    const currentStage = NFTTokenManager.getCurrentStage(totalMinted);
+    const stageEfficiency = NFTTokenManager.getStageEfficiency(currentStage);
+
+    console.log(`✅ Mint request prepared for ${userAddress}`);
+    console.log(`   Global Token ID: ${globalTokenId}`);
+    console.log(`   Level: ${level}`);
+    console.log(`   Chain: ${chainName} (${chainId})`);
+    console.log(`   Total Minted: ${totalMinted}`);
+    console.log(`   Stage: ${currentStage} (${stageEfficiency}%)`);
+
+    // 返回铸造参数
+    res.json({
+      success: true,
+      data: {
+        globalTokenId,
+        level,
+        totalMinted,
+        deadline,
+        signature,
+        contractAddress,
+        chainId,
+        chainName,
+        currentStage,
+        stageEfficiency,
+        expiresAt: new Date(deadline * 1000).toISOString()
+      }
+    });
+
+  } catch (error: any) {
+    console.error('❌ Request mint error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * 确认 NFT 已铸造（由前端在交易成功后调用）
+ * POST /api/nft/confirm-mint
+ */
+router.post('/confirm-mint', (req, res) => {
+  try {
+    const { globalTokenId, txHash, signature, deadline } = req.body;
+
+    if (!globalTokenId || !txHash) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required parameters'
+      });
+    }
+
+    // 标记为已铸造
+    NFTTokenManager.markAsMinted({
+      globalTokenId,
+      txHash,
+      signature,
+      deadline
+    });
+
+    console.log(`✅ NFT minted confirmed: Token ID ${globalTokenId}, TX: ${txHash}`);
+
+    res.json({
+      success: true,
+      message: 'Mint confirmed successfully'
+    });
+
+  } catch (error: any) {
+    console.error('❌ Confirm mint error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * 获取全局 NFT 统计
+ * GET /api/nft/global-stats
+ */
+router.get('/global-stats', (req, res) => {
+  try {
+    const stats = NFTTokenManager.getGlobalStats();
+    const levelStats = NFTTokenManager.getLevelStats();
+
+    res.json({
+      success: true,
+      data: {
+        global: stats,
+        levels: levelStats
+      }
+    });
+  } catch (error: any) {
+    console.error('❌ Error fetching global stats:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * 获取用户持有的 NFT（跨链）
+ * GET /api/nft/user/:address
+ */
+router.get('/user/:address', (req, res) => {
+  try {
+    const { address } = req.params;
+    
+    if (!address) {
+      return res.status(400).json({
+        success: false,
+        error: 'Address is required'
+      });
+    }
+
+    const nfts = NFTTokenManager.getUserNFTs(address);
+
+    res.json({
+      success: true,
+      data: nfts
+    });
+  } catch (error: any) {
+    console.error('❌ Error fetching user NFTs:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * 标记铸造失败（立即清理 Token ID）
+ * POST /api/nft/mark-failed
+ * 
+ * 用于：
+ * - 交易被拒绝
+ * - 交易失败
+ * - 用户取消交易
+ * 
+ * 立即释放 Token ID，不等待 30 分钟过期
+ */
+router.post('/mark-failed', (req, res) => {
+  try {
+    const { globalTokenId, reason = 'Transaction failed' } = req.body;
+
+    if (!globalTokenId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Global Token ID is required'
+      });
+    }
+
+    // 立即清理
+    NFTTokenManager.markAsFailed(globalTokenId, reason);
+
+    console.log(`🧹 Immediate cleanup: Token ID ${globalTokenId} released`);
+
+    res.json({
+      success: true,
+      message: `Token ID ${globalTokenId} released and available for next user`
+    });
+
+  } catch (error: any) {
+    console.error('❌ Mark failed error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * 取消预留（用户主动取消）
+ * POST /api/nft/cancel-reservation
+ * 
+ * 用于用户主动取消购买，立即释放 Token ID
+ */
+router.post('/cancel-reservation', (req, res) => {
+  try {
+    const { globalTokenId, userAddress } = req.body;
+
+    if (!globalTokenId || !userAddress) {
+      return res.status(400).json({
+        success: false,
+        error: 'Global Token ID and user address are required'
+      });
+    }
+
+    // 取消预留
+    const cancelled = NFTTokenManager.cancelReservation(globalTokenId, userAddress);
+
+    if (cancelled) {
+      console.log(`🧹 User cancelled: Token ID ${globalTokenId} released`);
+      res.json({
+        success: true,
+        message: `Reservation cancelled, Token ID ${globalTokenId} is now available`
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        error: 'Reservation not found or already processed'
+      });
+    }
+
+  } catch (error: any) {
+    console.error('❌ Cancel reservation error:', error);
     res.status(500).json({
       success: false,
       error: error.message

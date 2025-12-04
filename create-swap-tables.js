@@ -28,7 +28,7 @@ const db = new Database(dbPath);
 
 try {
   console.log('\n📊 检查现有表...');
-  const tables = db.prepare('SELECT name FROM sqlite_master WHERE type="table" ORDER BY name').all();
+  const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all();
   console.log('找到', tables.length, '个表');
   
   const swapMiningTables = ['user_claim_nonce', 'user_swap_stats', 'swap_transactions'];
@@ -60,7 +60,7 @@ try {
   
   console.log('\n📋 验证表结构:');
   swapMiningTables.forEach(tableName => {
-    const exists = db.prepare('SELECT name FROM sqlite_master WHERE type="table" AND name=?').get(tableName);
+    const exists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(tableName);
     if (exists) {
       const count = db.prepare('SELECT COUNT(*) as count FROM ' + tableName).get();
       console.log('  ✅', tableName + ':', count.count, '条记录');
