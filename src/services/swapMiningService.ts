@@ -198,19 +198,32 @@ export class SwapMiningService {
       // 标准化地址为小写
       const normalizedAddress = userAddress.toLowerCase();
       
-      // 用户基本统计 - 从 swap_transactions 表实时计算
+      // 用户基本统计 - 从 swap_transactions 和 user_swap_stats 表查询
       let stats;
       try {
-        stats = db.prepare(`
+        // 从 swap_transactions 计算实时统计
+        const txStats = db.prepare(`
           SELECT 
             COUNT(*) as total_trades,
             COALESCE(SUM(trade_value_usdt), 0) as total_volume_usdt,
             COALESCE(SUM(fee_usdt), 0) as total_fee_paid,
-            COALESCE(SUM(eagle_reward), 0) as total_eagle_earned,
-            0 as total_eagle_claimed
+            COALESCE(SUM(eagle_reward), 0) as total_eagle_earned
           FROM swap_transactions 
           WHERE user_address = ?
         `).get(normalizedAddress) as any;
+        
+        // 从 user_swap_stats 读取已领取金额
+        const claimedStats = db.prepare(`
+          SELECT COALESCE(total_eagle_claimed, 0) as total_eagle_claimed
+          FROM user_swap_stats
+          WHERE user_address = ?
+        `).get(normalizedAddress) as any;
+        
+        // 合并统计数据
+        stats = {
+          ...txStats,
+          total_eagle_claimed: claimedStats?.total_eagle_claimed || 0
+        };
       } catch (e) {
         stats = null;
       }
