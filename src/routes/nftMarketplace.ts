@@ -12,39 +12,69 @@ const LEVEL_NAMES = ['Micro', 'Mini', 'Bronze', 'Silver', 'Gold', 'Platinum', 'D
 
 /**
  * GET /api/marketplace/listings
- * 获取所有在售 NFT
+ * 获取所有在售 NFT（支持多链）
  */
 router.get('/listings', async (req, res) => {
     try {
-        // 从 user_nfts 表获取所有活跃的 NFT 挂单
-        const listings = db.prepare(`
-            SELECT 
-                u.token_id,
-                u.owner_address as seller_address,
-                u.listing_price as price,
-                u.level as nft_level,
-                u.weight as final_power,
-                u.minted_at as listed_at,
-                COALESCE(i.name, 'NFT') as level_name
-            FROM user_nfts u
-            LEFT JOIN nft_inventory i ON u.level = i.level
-            WHERE u.is_listed = 1 AND u.listing_price > 0
-            ORDER BY u.created_at DESC
-        `).all();
+        // 首先尝试从 nft_holders 表获取挂单（新的多链表）
+        let listings: any[] = [];
+        
+        try {
+            listings = db.prepare(`
+                SELECT 
+                    h.global_token_id as token_id,
+                    h.owner_address as seller_address,
+                    h.listing_price as price,
+                    h.level as nft_level,
+                    h.weight as final_power,
+                    h.minted_at as listed_at,
+                    h.chain_id,
+                    h.chain_name,
+                    COALESCE(l.level_name, 'NFT') as level_name
+                FROM nft_holders h
+                LEFT JOIN nft_level_stats l ON h.level = l.level
+                WHERE h.is_listed = 1 AND h.listing_price > 0
+                ORDER BY h.created_at DESC
+            `).all();
+        } catch (e) {
+            console.log('nft_holders query failed, trying user_nfts...');
+        }
+
+        // 如果 nft_holders 没有数据，回退到 user_nfts 表
+        if (listings.length === 0) {
+            listings = db.prepare(`
+                SELECT 
+                    u.token_id,
+                    u.owner_address as seller_address,
+                    u.listing_price as price,
+                    u.level as nft_level,
+                    u.weight as final_power,
+                    u.minted_at as listed_at,
+                    196 as chain_id,
+                    'X Layer' as chain_name,
+                    COALESCE(i.name, 'NFT') as level_name
+                FROM user_nfts u
+                LEFT JOIN nft_inventory i ON u.level = i.level
+                WHERE u.is_listed = 1 AND u.listing_price > 0
+                ORDER BY u.created_at DESC
+            `).all();
+        }
 
         console.log(`🔍 [API] Found ${listings.length} active listings in database`);
 
         // 映射数据结构
         const mappedListings = listings.map((l: any) => ({
             tokenId: l.token_id,
-            seller: l.seller_address || '', // 确保不为 null
+            seller: l.seller_address || '',
             price: l.price || 0,
             level: l.nft_level || 1,
-            levelName: l.level_name || `Level ${l.nft_level}`,
-            stage: 1, // 默认阶段
-            finalPower: l.final_power || 0,
-            basePower: l.final_power || 0,
-            listedAt: l.listed_at
+            levelName: l.level_name || LEVEL_NAMES[(l.nft_level || 1) - 1] || `Level ${l.nft_level}`,
+            stage: 1,
+            finalPower: l.final_power ? l.final_power / 1000 : 0, // 转换 weight
+            basePower: l.final_power ? l.final_power / 1000 : 0,
+            listedAt: l.listed_at,
+            chainId: l.chain_id || 196,
+            chainName: l.chain_name || 'X Layer'
         }));
 
         res.json({

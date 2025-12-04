@@ -10,6 +10,7 @@ import { logger, logRequest } from './utils/logger';
 // Import services
 import { simpleNftSync } from './services/simpleNftSync';
 import { multiChainNftSync } from './services/multiChainNftSync';
+import { marketplaceSyncService } from './services/marketplaceSyncService';
 
 // Import routes
 import tokensRouter from './routes/tokens';
@@ -200,6 +201,10 @@ const initializeApp = async () => {
       await simpleNftSync.start();
       logger.info('Single-chain NFT sync service started successfully');
     }
+    
+    // 启动 Marketplace 同步服务
+    marketplaceSyncService.start(30000); // 每30秒同步一次
+    logger.info('Marketplace sync service started successfully');
     
     // 启动Bridge Relayer服务
     if (process.env.RELAYER_PRIVATE_KEY) {
