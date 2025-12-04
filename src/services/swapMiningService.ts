@@ -444,30 +444,35 @@ export class SwapMiningService {
       const expiryMinutes = parseInt(process.env.SIGNATURE_EXPIRY_MINUTES || '30');
       const deadline = Math.floor(Date.now() / 1000) + (expiryMinutes * 60);
       
-      // 6. 生成签名消息
-      const amount = ethers.parseEther(pendingRewards.toString());
-      const messageHash = ethers.solidityPackedKeccak256(
-        ['address', 'uint256', 'uint256', 'uint256', 'uint256', 'address'],
-        [userAddress, amount, userNonce, deadline, chainId, contractAddress]
+      // 6. 生成签名消息 (Match updated SwapMining.sol contract)
+      // Contract: keccak256(abi.encode(user, amount, nonce, deadline))
+      const amountBN = ethers.parseEther(pendingRewards.toString());
+      
+      // Use solidityPacked for abi.encode equivalent
+      const messageHash = ethers.keccak256(
+        ethers.AbiCoder.defaultAbiCoder().encode(
+          ['address', 'uint256', 'uint256', 'uint256'],
+          [userAddress, amountBN, userNonce, deadline]
+        )
       );
       
       // 7. 签名
       const wallet = new ethers.Wallet(signerPrivateKey);
+      // ethers.wallet.signMessage automatically adds the "\x19Ethereum Signed Message:\n32" prefix
       const signature = await wallet.signMessage(ethers.getBytes(messageHash));
       
-      console.log(`✅ 签名生成成功: ${pendingRewards} EAGLE`);
+      console.log(`✅ 签名生成成功: ${pendingRewards} EAGLE (deadline: ${new Date(deadline * 1000).toISOString()})`);
       
       return {
         success: true,
         data: {
           userAddress,
-          amount: amount.toString(), // wei 格式
-          amountFormatted: pendingRewards, // 人类可读格式
+          amount: amountBN.toString(), // wei format for contract
+          amountFormatted: pendingRewards, 
           nonce: userNonce,
           deadline,
           signature,
-          contractAddress,
-          chainId
+          contractAddress
         }
       };
       
