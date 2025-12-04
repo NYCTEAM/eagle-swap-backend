@@ -128,28 +128,37 @@ router.get('/user/:address', (req, res) => {
     }
     
     // 转换为前端期望的格式（兼容旧API）
-    const nfts = userNFTs.map((nft: any) => ({
-      token_id: nft.global_token_id || nft.token_id,
-      owner_address: nft.owner_address,
-      level: nft.level,
-      level_name: nft.level_name || nft.name,
-      price_usdt: nft.price_usdt / 1000000, // 转换为美元（6位小数）
-      effective_weight: nft.effective_weight || nft.weight,
-      weight: nft.weight,
-      power: nft.weight || 0, // 兼容前端字段名
-      stage: nft.stage || 1,
-      difficulty_multiplier: 1.0, // 默认值，稍后可以从 stage 计算
-      total_earned: 0, // 暂时为 0
-      pending_rewards: 0, // 暂时为 0
-      minted_at: nft.minted_at,
-      payment_method: nft.payment_method || 'USDT',
-      purchase_time: new Date((nft.minted_at || 0) * 1000).toISOString(),
-      created_at: nft.created_at,
-      chain_id: nft.chain_id,
-      chain_name: nft.chain_name,
-      is_listed: nft.is_listed === 1, // 转换为布尔值
-      listing_price: (nft.listing_price || 0) / 1000000 // 转换为美元（6位小数）
-    }));
+    // weight 在数据库中存储为整数 (1 = 0.1x, 10 = 1.0x, 1000 = 100x 或者直接是 1000 = 1.0x)
+    // 需要根据实际存储格式转换
+    const nfts = userNFTs.map((nft: any) => {
+      // 如果 weight >= 100，假设是以 1000 为基数存储的 (1000 = 1.0x)
+      // 否则假设是以 10 为基数存储的 (1 = 0.1x, 10 = 1.0x)
+      const rawWeight = nft.weight || nft.effective_weight || 1;
+      const displayWeight = rawWeight >= 100 ? rawWeight / 1000 : rawWeight / 10;
+      
+      return {
+        token_id: nft.global_token_id || nft.token_id,
+        owner_address: nft.owner_address,
+        level: nft.level,
+        level_name: nft.level_name || nft.name,
+        price_usdt: nft.price_usdt ? nft.price_usdt / 1000000 : 0, // 转换为美元（6位小数）
+        effective_weight: displayWeight,
+        weight: displayWeight,
+        power: displayWeight, // 兼容前端字段名
+        stage: nft.stage || 1,
+        difficulty_multiplier: 1.0, // 默认值，稍后可以从 stage 计算
+        total_earned: 0, // 暂时为 0
+        pending_rewards: 0, // 暂时为 0
+        minted_at: nft.minted_at,
+        payment_method: nft.payment_method || 'USDT',
+        purchase_time: new Date((nft.minted_at || 0) * 1000).toISOString(),
+        created_at: nft.created_at,
+        chain_id: nft.chain_id,
+        chain_name: nft.chain_name,
+        is_listed: nft.is_listed === 1, // 转换为布尔值
+        listing_price: (nft.listing_price || 0) / 1000000 // 转换为美元（6位小数）
+      };
+    });
 
     // 计算总权重
     const totalWeight = nfts.reduce((sum: number, nft: any) => sum + (nft.effective_weight || 0), 0);
