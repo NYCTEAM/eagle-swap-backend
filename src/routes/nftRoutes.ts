@@ -14,26 +14,22 @@ const router = express.Router();
  */
 router.get('/levels', (req, res) => {
   try {
-    // 尝试从全局共享库存表读取（多链共享）
+    // 从新的全局NFT表读取（多链共享）
     let inventory: any[];
     let globalStats: any = null;
     
     try {
+      // 从 nft_level_stats 读取等级统计
       inventory = db.prepare(`
-        SELECT * FROM nft_global_inventory ORDER BY level
+        SELECT * FROM nft_level_stats ORDER BY level
       `).all();
       
-      // 计算全局统计
-      const stats = db.prepare(`
-        SELECT 
-          SUM(total_supply) as total_supply,
-          SUM(minted) as total_minted,
-          SUM(available) as total_available
-        FROM nft_global_inventory
+      // 从 nft_global_stats 读取全局统计
+      globalStats = db.prepare(`
+        SELECT * FROM nft_global_stats WHERE id = 1
       `).get();
-      
-      globalStats = stats;
     } catch (e) {
+      console.error('Error reading from new NFT tables:', e);
       // 如果没有全局表，回退到旧的 simpleNftSync
       inventory = simpleNftSync.getInventory();
     }
@@ -42,15 +38,15 @@ router.get('/levels', (req, res) => {
     const levels = inventory.map((item: any) => ({
       level: item.level,
       name: item.level_name || item.name,
-      weight: item.mining_power || item.weight,
+      weight: item.weight || item.mining_power,
       price_usdt: item.price_usdt,
       price_eth: 0, // 暂不支持ETH支付
       total_supply: item.total_supply,
-      minted: item.minted,
-      available: item.available,
-      description: `${item.level_name || item.name} - Mining Weight: ${item.mining_power || item.weight}x`,
+      minted: item.minted || 0,
+      available: item.total_supply - (item.minted || 0),
+      description: `${item.level_name || item.name} - Mining Weight: ${item.weight || item.mining_power}x`,
       sold_percentage: item.total_supply > 0 
-        ? Math.round((item.minted * 100.0) / item.total_supply * 100) / 100 
+        ? Math.round(((item.minted || 0) * 100.0) / item.total_supply * 100) / 100 
         : 0
     }));
 
@@ -116,21 +112,35 @@ router.get('/user/:address', (req, res) => {
       });
     }
 
-    // 从新的简化NFT同步服务获取用户NFT数据
-    const userNFTs = simpleNftSync.getUserNFTs(address);
+    // 从新的 nft_holders 表读取用户NFT数据
+    let userNFTs: any[];
+    try {
+      userNFTs = db.prepare(`
+        SELECT h.*, l.level_name, l.price_usdt, l.weight
+        FROM nft_holders h
+        LEFT JOIN nft_level_stats l ON h.level = l.level
+        WHERE LOWER(h.owner_address) = LOWER(?)
+        ORDER BY h.minted_at DESC
+      `).all(address);
+    } catch (e) {
+      console.error('Error reading from nft_holders, falling back to simpleNftSync:', e);
+      userNFTs = simpleNftSync.getUserNFTs(address);
+    }
     
     // 转换为前端期望的格式（兼容旧API）
     const nfts = userNFTs.map((nft: any) => ({
-      token_id: nft.token_id,
+      token_id: nft.global_token_id || nft.token_id,
       owner_address: nft.owner_address,
       level: nft.level,
-      level_name: nft.name,
+      level_name: nft.level_name || nft.name,
       price_usdt: nft.price_usdt,
-      effective_weight: nft.weight,
+      effective_weight: nft.effective_weight || nft.weight,
       weight: nft.weight,
       minted_at: nft.minted_at,
-      payment_method: nft.payment_method,
+      payment_method: nft.payment_method || 'USDT',
       created_at: nft.created_at,
+      chain_id: nft.chain_id,
+      chain_name: nft.chain_name,
       is_listed: nft.is_listed === 1, // 转换为布尔值
       listing_price: nft.listing_price || 0
     }));
