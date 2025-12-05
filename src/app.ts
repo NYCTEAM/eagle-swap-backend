@@ -204,7 +204,7 @@ const initializeApp = async () => {
     }
     
     // 启动 Marketplace 同步服务
-    marketplaceSyncService.start(30000); // 每30秒同步一次
+    await marketplaceSyncService.start(30000); // 每30秒同步一次
     logger.info('Marketplace sync service started successfully');
     
     // 启动 OTC 同步服务
