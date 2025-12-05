@@ -66,7 +66,7 @@ const CHAIN_CONFIGS = [
   {
     chainId: 56,
     chainName: 'BSC',
-    rpcUrl: process.env.BSC_RPC_URL || 'https://bsc-dataseed.binance.org',
+    rpcUrl: process.env.BSC_RPC_URL || 'https://rpc1.eagleswap.llc/bsc/',
     marketplaceAddress: '0x95c212b1ABa037266155F8af3CCF3DdAb64456E5',
     nftAddress: '0x3c117d186C5055071EfF91d87f2600eaF88D591D',
     usdtDecimals: 18

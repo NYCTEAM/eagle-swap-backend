@@ -16,7 +16,7 @@ const CONTRACTS = {
   },
   bsc: {
     chainId: 56,
-    rpc: process.env.BSC_RPC_URL || 'https://bsc-dataseed1.binance.org',
+    rpc: process.env.BSC_RPC_URL || 'https://rpc1.eagleswap.llc/bsc/',
     token: '0x83Fe5B70a08d42F6224A9644b3c73692f2d9092a',
     bridge: '0x0985DB9C2FA117152941521991E06AAfA03c82F3',
   },

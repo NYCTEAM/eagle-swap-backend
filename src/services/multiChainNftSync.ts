@@ -22,7 +22,7 @@ const CHAIN_CONFIGS: ChainConfig[] = [
   {
     chainId: 56,
     chainName: 'BSC',
-    rpcUrl: process.env.BSC_RPC_URL || 'https://bsc-dataseed.binance.org',
+    rpcUrl: process.env.BSC_RPC_URL || 'https://rpc1.eagleswap.llc/bsc/',
     nftAddress: process.env.BSC_NFT_ADDRESS || '0x3c117d186C5055071EfF91d87f2600eaF88D591D', // Multi-Chain Global (Auto-decimals)
     startBlock: 0
   }

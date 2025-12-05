@@ -19,7 +19,7 @@ class OTCSync {
     // 初始化RPC连接
     const rpcUrl = chainId === 196 
       ? (process.env.X_LAYER_RPC_URL || 'https://rpc.xlayer.tech')
-      : 'https://bsc-dataseed.binance.org';
+      : (process.env.BSC_RPC_URL || 'https://rpc1.eagleswap.llc/bsc/');
     
     this.provider = new ethers.JsonRpcProvider(rpcUrl);
     
