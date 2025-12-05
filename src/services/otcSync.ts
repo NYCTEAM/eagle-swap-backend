@@ -43,6 +43,8 @@ class OTCSync {
     console.log(`   RPC: ${rpcUrl}`);
   }
 
+  private pollingInterval: NodeJS.Timeout | null = null;
+  
   // 启动事件监听
   async start() {
     console.log(`🚀 [OTC Sync] Starting for ${this.network}...`);
@@ -50,37 +52,89 @@ class OTCSync {
     // 先同步历史订单
     await this.syncHistoricalOrders();
     
-    // 监听 OrderCreated 事件
-    this.contract.on('OrderCreated', async (orderId, pairId, maker, orderType, price, baseAmount, event) => {
-      try {
-        console.log(`\n📝 [OrderCreated] Order ${orderId} on ${this.network}`);
-        await this.handleOrderCreated(orderId, event);
-      } catch (error) {
-        console.error(`❌ [OrderCreated] Error:`, error);
-      }
-    });
+    // 使用轮询方式代替事件监听（BSC 公共 RPC 不支持 eth_newFilter）
+    this.startPolling();
 
-    // 监听 OrderFilled 事件
-    this.contract.on('OrderFilled', async (orderId, taker, fillAmount, remainingAmount, event) => {
+    console.log(`✅ [OTC Sync] Polling started for ${this.network}`);
+  }
+  
+  // 轮询新事件
+  private startPolling() {
+    const POLL_INTERVAL = 15000; // 15秒轮询一次
+    
+    this.pollingInterval = setInterval(async () => {
       try {
-        console.log(`\n✅ [OrderFilled] Order ${orderId} filled on ${this.network}`);
-        await this.handleOrderFilled(orderId, taker, fillAmount, event);
+        await this.pollNewEvents();
       } catch (error) {
-        console.error(`❌ [OrderFilled] Error:`, error);
+        console.error(`❌ [OTC Sync] Polling error for ${this.network}:`, error);
       }
-    });
-
-    // 监听 OrderCancelled 事件
-    this.contract.on('OrderCancelled', async (orderId, event) => {
-      try {
-        console.log(`\n🚫 [OrderCancelled] Order ${orderId} cancelled on ${this.network}`);
-        await this.handleOrderCancelled(orderId, event);
-      } catch (error) {
-        console.error(`❌ [OrderCancelled] Error:`, error);
+    }, POLL_INTERVAL);
+    
+    // 立即执行一次
+    this.pollNewEvents();
+  }
+  
+  // 轮询新事件
+  private async pollNewEvents() {
+    try {
+      const currentBlock = await this.provider.getBlockNumber();
+      const lastSyncedBlock = this.getLastSyncedBlock();
+      
+      if (lastSyncedBlock >= currentBlock) {
+        return; // 已经是最新
       }
-    });
-
-    console.log(`✅ [OTC Sync] Event listeners started for ${this.network}`);
+      
+      const fromBlock = lastSyncedBlock + 1;
+      const toBlock = Math.min(fromBlock + 1000, currentBlock); // 每次最多扫描1000个区块
+      
+      // 扫描 OrderCreated 事件
+      const createdEvents = await this.contract.queryFilter('OrderCreated', fromBlock, toBlock);
+      for (const event of createdEvents) {
+        try {
+          const eventLog = event as ethers.EventLog;
+          const orderId = eventLog.args[0];
+          console.log(`\n📝 [OrderCreated] Order ${orderId} on ${this.network}`);
+          await this.handleOrderCreated(orderId, event);
+        } catch (error) {
+          console.error(`❌ [OrderCreated] Error:`, error);
+        }
+      }
+      
+      // 扫描 OrderFilled 事件
+      const filledEvents = await this.contract.queryFilter('OrderFilled', fromBlock, toBlock);
+      for (const event of filledEvents) {
+        try {
+          const eventLog = event as ethers.EventLog;
+          const [orderId, taker, fillAmount] = eventLog.args;
+          console.log(`\n✅ [OrderFilled] Order ${orderId} filled on ${this.network}`);
+          await this.handleOrderFilled(orderId, taker, fillAmount, event);
+        } catch (error) {
+          console.error(`❌ [OrderFilled] Error:`, error);
+        }
+      }
+      
+      // 扫描 OrderCancelled 事件
+      const cancelledEvents = await this.contract.queryFilter('OrderCancelled', fromBlock, toBlock);
+      for (const event of cancelledEvents) {
+        try {
+          const eventLog = event as ethers.EventLog;
+          const orderId = eventLog.args[0];
+          console.log(`\n🚫 [OrderCancelled] Order ${orderId} cancelled on ${this.network}`);
+          await this.handleOrderCancelled(orderId, event);
+        } catch (error) {
+          console.error(`❌ [OrderCancelled] Error:`, error);
+        }
+      }
+      
+      // 保存同步状态
+      this.saveLastSyncedBlock(toBlock);
+      
+      if (createdEvents.length > 0 || filledEvents.length > 0 || cancelledEvents.length > 0) {
+        console.log(`📊 [OTC Sync] ${this.network} synced to block ${toBlock}, events: ${createdEvents.length} created, ${filledEvents.length} filled, ${cancelledEvents.length} cancelled`);
+      }
+    } catch (error) {
+      console.error(`❌ [OTC Sync] Poll error for ${this.network}:`, error);
+    }
   }
   
   // 获取最后同步的区块号
@@ -414,8 +468,12 @@ class OTCSync {
 
   // 停止监听
   stop() {
+    if (this.pollingInterval) {
+      clearInterval(this.pollingInterval);
+      this.pollingInterval = null;
+    }
     this.contract.removeAllListeners();
-    console.log(`🛑 [OTC Sync] Stopped event listeners for ${this.network}`);
+    console.log(`🛑 [OTC Sync] Stopped polling for ${this.network}`);
   }
 }
 
