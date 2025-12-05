@@ -83,55 +83,122 @@ class OTCSync {
     console.log(`✅ [OTC Sync] Event listeners started for ${this.network}`);
   }
   
-  // 同步历史订单
+  // 获取最后同步的区块号
+  private getLastSyncedBlock(): number {
+    try {
+      const result = db.prepare(`
+        SELECT value FROM otc_sync_state WHERE key = ? AND network = ?
+      `).get('last_block', this.network) as { value: string } | undefined;
+      return result ? parseInt(result.value) : 0;
+    } catch {
+      // 表可能不存在，创建它
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS otc_sync_state (
+          key TEXT NOT NULL,
+          network TEXT NOT NULL,
+          value TEXT,
+          updated_at INTEGER,
+          PRIMARY KEY (key, network)
+        )
+      `);
+      return 0;
+    }
+  }
+  
+  // 保存最后同步的区块号
+  private saveLastSyncedBlock(blockNumber: number) {
+    const now = Math.floor(Date.now() / 1000);
+    db.prepare(`
+      INSERT OR REPLACE INTO otc_sync_state (key, network, value, updated_at)
+      VALUES (?, ?, ?, ?)
+    `).run('last_block', this.network, blockNumber.toString(), now);
+  }
+  
+  // 同步历史订单 - 只同步新区块
   async syncHistoricalOrders() {
-    console.log(`📜 [OTC Sync] Syncing historical orders for ${this.network}...`);
+    console.log(`📜 [OTC Sync] Checking sync state for ${this.network}...`);
     
     try {
       const currentBlock = await this.provider.getBlockNumber();
-      const fromBlock = Math.max(0, currentBlock - 10000);
-      const BATCH_SIZE = 100; // 每批扫描100个区块
+      const lastSyncedBlock = this.getLastSyncedBlock();
       
-      console.log(`   Scanning blocks ${fromBlock} to ${currentBlock} (batch size: ${BATCH_SIZE})...`);
+      // 检查数据库是否已有订单
+      const orderCount = (db.prepare('SELECT COUNT(*) as count FROM otc_orders WHERE LOWER(network) = LOWER(?)').get(this.network) as { count: number })?.count || 0;
       
-      let totalEvents = 0;
+      console.log(`   Last synced block: ${lastSyncedBlock}`);
+      console.log(`   Current block: ${currentBlock}`);
+      console.log(`   Existing orders in DB: ${orderCount}`);
       
-      // 分批扫描，每批100个区块，每批之间等待1秒
-      for (let start = fromBlock; start < currentBlock; start += BATCH_SIZE) {
-        const end = Math.min(start + BATCH_SIZE - 1, currentBlock);
+      // 如果已经同步过，只扫描新区块
+      if (lastSyncedBlock > 0) {
+        const fromBlock = lastSyncedBlock + 1;
+        const blocksBehind = currentBlock - lastSyncedBlock;
         
-        try {
-          const filter = this.contract.filters.OrderCreated();
-          const events = await this.contract.queryFilter(filter, start, end);
-          
-          for (const event of events) {
-            try {
-              const orderId = (event as any).args[0];
-              
-              // 检查订单是否已存在
-              const existing = db.prepare('SELECT order_id FROM otc_orders WHERE order_id = ?').get(orderId.toString());
-              if (!existing) {
-                await this.handleOrderCreated(orderId, event);
-                totalEvents++;
-              }
-            } catch (e) {
-              console.error(`   Error processing event:`, e);
-            }
-          }
-          
-          // 每批之间等待1秒，避免RPC限流
-          if (end < currentBlock) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          }
-        } catch (e) {
-          console.error(`   Error scanning blocks ${start}-${end}:`, e);
+        if (blocksBehind <= 0) {
+          console.log(`   ✅ Already up to date!`);
+          this.saveLastSyncedBlock(currentBlock);
+          return;
         }
+        
+        console.log(`   📦 Syncing ${blocksBehind} new blocks (${fromBlock} to ${currentBlock})...`);
+        await this.scanBlocks(fromBlock, currentBlock);
+      } else if (orderCount > 0) {
+        // 数据库有订单但没有同步记录，只监听新事件
+        console.log(`   ✅ Database has ${orderCount} orders, skipping historical scan`);
+        console.log(`   📡 Will only listen for new events from block ${currentBlock}`);
+      } else {
+        // 首次启动，扫描最近的区块
+        const fromBlock = Math.max(0, currentBlock - 5000); // 减少到 5000 个区块
+        console.log(`   🔄 First sync, scanning blocks ${fromBlock} to ${currentBlock}...`);
+        await this.scanBlocks(fromBlock, currentBlock);
       }
       
-      console.log(`✅ [OTC Sync] Historical sync completed for ${this.network}, synced ${totalEvents} new orders`);
+      // 保存当前区块号
+      this.saveLastSyncedBlock(currentBlock);
+      console.log(`   ✅ Sync state saved at block ${currentBlock}`);
+      
     } catch (error) {
-      console.error(`❌ [OTC Sync] Historical sync failed for ${this.network}:`, error);
+      console.error(`❌ [OTC Sync] Historical sync error:`, error);
     }
+  }
+  
+  // 扫描区块范围
+  private async scanBlocks(fromBlock: number, toBlock: number) {
+    const BATCH_SIZE = 500; // 增加批次大小
+    let totalEvents = 0;
+    
+    for (let start = fromBlock; start <= toBlock; start += BATCH_SIZE) {
+      const end = Math.min(start + BATCH_SIZE - 1, toBlock);
+      
+      try {
+        const filter = this.contract.filters.OrderCreated();
+        const events = await this.contract.queryFilter(filter, start, end);
+        
+        for (const event of events) {
+          try {
+            const orderId = (event as any).args[0];
+            
+            // 检查订单是否已存在
+            const existing = db.prepare('SELECT order_id FROM otc_orders WHERE order_id = ?').get(orderId.toString());
+            if (!existing) {
+              await this.handleOrderCreated(orderId, event);
+              totalEvents++;
+            }
+          } catch (e) {
+            console.error(`   Error processing event:`, e);
+          }
+        }
+        
+        // 每批之间等待500ms，避免RPC限流
+        if (end < toBlock) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      } catch (e) {
+        console.error(`   Error scanning blocks ${start}-${end}:`, e);
+      }
+    }
+    
+    console.log(`   ✅ Scanned ${toBlock - fromBlock + 1} blocks, found ${totalEvents} new orders`);
   }
 
   // 更新用户统计
