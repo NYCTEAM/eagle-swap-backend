@@ -8,9 +8,13 @@ class OTCSync {
   private chainId: number;
   private network: string;
 
+  private usdtDecimals: number;
+  
   constructor(chainId: number = 196) {
     this.chainId = chainId;
     this.network = chainId === 196 ? 'X Layer' : 'BSC';
+    // X Layer USDT: 6 decimals, BSC USDT: 18 decimals
+    this.usdtDecimals = chainId === 196 ? 6 : 18;
     
     // 初始化RPC连接
     const rpcUrl = chainId === 196 
@@ -196,8 +200,8 @@ class OTCSync {
     const side = isBuy ? 'buy' : 'sell';
     
     // 格式化金额
-    const baseAmount = ethers.formatUnits(orderData[7], 18); // EAGLE
-    const price = ethers.formatUnits(orderData[6], 6); // USDT
+    const baseAmount = ethers.formatUnits(orderData[7], 18); // EAGLE (always 18 decimals)
+    const price = ethers.formatUnits(orderData[6], this.usdtDecimals); // USDT (6 for X Layer, 18 for BSC)
     
     let tokenSell, tokenBuy, amountSell, amountBuy;
     if (isBuy) {
