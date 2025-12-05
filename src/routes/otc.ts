@@ -534,6 +534,20 @@ router.post('/fills', (req: Request, res: Response) => {
     
     console.log(`✅ [Fill Order] Found order:`, { orderId: order.order_id, maker: order.maker_address, network: order.network });
 
+    // 根据订单类型确定 base_token 和 quote_token
+    // BUY 订单: token_buy = EAGLE (base), token_sell = USDT (quote)
+    // SELL 订单: token_sell = EAGLE (base), token_buy = USDT (quote)
+    const baseToken = order.side === 'buy' ? order.token_buy : order.token_sell;
+    const quoteToken = order.side === 'buy' ? order.token_sell : order.token_buy;
+    
+    console.log(`📊 [Fill Order] Tokens:`, { 
+      side: order.side, 
+      baseToken, 
+      quoteToken,
+      token_sell: order.token_sell,
+      token_buy: order.token_buy
+    });
+
     // 插入成交记录
     const fillStmt = db.prepare(`
       INSERT INTO otc_fills (
@@ -547,11 +561,11 @@ router.post('/fills', (req: Request, res: Response) => {
       orderId,
       order.maker_address,
       taker.toLowerCase(),
-      order.base_token,
-      order.quote_token,
+      baseToken || '',
+      quoteToken || '',
       baseAmount,
       quoteAmount,
-      order.price,
+      order.price_usdt || order.price || 0,
       network,
       txHash,
       blockNumber || 0,
@@ -559,8 +573,22 @@ router.post('/fills', (req: Request, res: Response) => {
     );
 
     // 计算新的剩余数量
-    const currentRemaining = parseFloat(order.amount_remaining || order.amount_sell || order.amount_buy);
-    const fillAmountFloat = parseFloat(baseAmount);
+    // baseAmount 从前端传来可能是 wei 格式（大数字字符串）
+    let currentRemaining = parseFloat(order.amount_remaining || order.amount_sell || order.amount_buy);
+    let fillAmountFloat = parseFloat(baseAmount);
+    
+    // 如果 fillAmount 是 wei 格式（>1e15），转换为普通数值
+    if (fillAmountFloat > 1e15) {
+      fillAmountFloat = fillAmountFloat / 1e18;
+      console.log(`📊 [Fill Order] Converted fillAmount from wei: ${baseAmount} -> ${fillAmountFloat}`);
+    }
+    
+    // 如果 currentRemaining 也是 wei 格式，转换
+    if (currentRemaining > 1e15) {
+      currentRemaining = currentRemaining / 1e18;
+      console.log(`📊 [Fill Order] Converted currentRemaining from wei: ${order.amount_remaining} -> ${currentRemaining}`);
+    }
+    
     const newRemaining = Math.max(0, currentRemaining - fillAmountFloat);
     
     // 根据剩余数量决定订单状态
