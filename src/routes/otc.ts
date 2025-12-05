@@ -512,17 +512,27 @@ router.post('/fills', (req: Request, res: Response) => {
 
     const now = Math.floor(Date.now() / 1000);
 
-    // 获取订单信息
+    // 获取订单信息 - 同时匹配网络
+    console.log(`🔍 [Fill Order] Looking for order ${orderId} on ${network}`);
+    
     const order = db
-      .prepare('SELECT * FROM otc_orders WHERE order_id = ?')
-      .get(orderId) as any;
+      .prepare('SELECT * FROM otc_orders WHERE order_id = ? AND LOWER(network) = LOWER(?)')
+      .get(orderId, network) as any;
 
     if (!order) {
+      console.error(`❌ [Fill Order] Order not found: orderId=${orderId}, network=${network}`);
+      // 尝试不带网络查询，看看订单是否存在
+      const orderAny = db.prepare('SELECT order_id, network FROM otc_orders WHERE order_id = ?').get(orderId) as any;
+      if (orderAny) {
+        console.error(`❌ [Fill Order] Order exists but on different network: ${orderAny.network}`);
+      }
       return res.status(404).json({
         success: false,
-        error: 'Order not found',
+        error: `Order not found (orderId=${orderId}, network=${network})`,
       });
     }
+    
+    console.log(`✅ [Fill Order] Found order:`, { orderId: order.order_id, maker: order.maker_address, network: order.network });
 
     // 插入成交记录
     const fillStmt = db.prepare(`
