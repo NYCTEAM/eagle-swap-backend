@@ -132,8 +132,34 @@ class BridgeRelayerService extends EventEmitter {
       CREATE INDEX IF NOT EXISTS idx_bridge_status ON bridge_transactions(status);
       CREATE INDEX IF NOT EXISTS idx_bridge_from_address ON bridge_transactions(from_address);
       CREATE INDEX IF NOT EXISTS idx_bridge_created_at ON bridge_transactions(created_at);
+      
+      -- 同步状态表 (保存最后同步的区块号)
+      CREATE TABLE IF NOT EXISTS bridge_sync_state (
+        chain TEXT PRIMARY KEY,
+        last_block INTEGER DEFAULT 0,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
     `);
     console.log('📊 Bridge transactions table initialized');
+  }
+  
+  // 获取最后同步的区块号
+  private getLastSyncedBlock(chain: string): number {
+    try {
+      const result = this.db.prepare('SELECT last_block FROM bridge_sync_state WHERE chain = ?').get(chain) as { last_block: number } | undefined;
+      return result?.last_block || 0;
+    } catch {
+      return 0;
+    }
+  }
+  
+  // 保存最后同步的区块号
+  private saveLastSyncedBlock(chain: string, blockNumber: number) {
+    this.db.prepare(`
+      INSERT INTO bridge_sync_state (chain, last_block, updated_at)
+      VALUES (?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(chain) DO UPDATE SET last_block = ?, updated_at = CURRENT_TIMESTAMP
+    `).run(chain, blockNumber, blockNumber);
   }
 
   private loadPendingFromDb() {
@@ -210,6 +236,9 @@ class BridgeRelayerService extends EventEmitter {
     
     console.log('🚀 Starting Bridge Relayer...');
     
+    // 先扫描历史事件（从上次同步的区块开始）
+    await this.syncHistoricalEvents();
+    
     // Listen for X Layer bridge events
     this.listenXLayerEvents();
     
@@ -217,6 +246,189 @@ class BridgeRelayerService extends EventEmitter {
     this.listenBSCEvents();
     
     console.log('✅ Bridge Relayer started');
+  }
+  
+  // 扫描历史事件
+  private async syncHistoricalEvents() {
+    console.log('📜 Syncing historical bridge events...');
+    
+    // X Layer
+    await this.syncChainHistory('xlayer', this.xlayerProvider, CONTRACTS.xlayer.bridge, XLAYER_BRIDGE_ABI);
+    
+    // BSC
+    await this.syncChainHistory('bsc', this.bscProvider, CONTRACTS.bsc.bridge, BSC_BRIDGE_ABI);
+  }
+  
+  private async syncChainHistory(chain: string, provider: ethers.JsonRpcProvider, bridgeAddress: string, abi: string[]) {
+    try {
+      const currentBlock = await provider.getBlockNumber();
+      const lastSyncedBlock = this.getLastSyncedBlock(chain);
+      
+      console.log(`   [${chain.toUpperCase()}] Last synced: ${lastSyncedBlock}, Current: ${currentBlock}`);
+      
+      if (lastSyncedBlock >= currentBlock) {
+        console.log(`   [${chain.toUpperCase()}] Already up to date`);
+        return;
+      }
+      
+      const fromBlock = lastSyncedBlock > 0 ? lastSyncedBlock + 1 : Math.max(0, currentBlock - 10000);
+      const bridge = new ethers.Contract(bridgeAddress, abi, provider);
+      
+      // 分批扫描
+      const BATCH_SIZE = 5000;
+      for (let start = fromBlock; start <= currentBlock; start += BATCH_SIZE) {
+        const end = Math.min(start + BATCH_SIZE - 1, currentBlock);
+        
+        try {
+          // 根据链类型选择事件
+          if (chain === 'xlayer') {
+            const events = await bridge.queryFilter('BridgeOut', start, end);
+            for (const event of events) {
+              await this.processXLayerEvent(event);
+            }
+            
+            const solanaEvents = await bridge.queryFilter('BridgeOutSolana', start, end);
+            for (const event of solanaEvents) {
+              await this.processXLayerSolanaEvent(event);
+            }
+          } else if (chain === 'bsc') {
+            const events = await bridge.queryFilter('BridgeInitiated', start, end);
+            for (const event of events) {
+              await this.processBSCEvent(event);
+            }
+          }
+        } catch (e) {
+          console.error(`   [${chain.toUpperCase()}] Error scanning blocks ${start}-${end}:`, e);
+        }
+      }
+      
+      // 保存同步状态
+      this.saveLastSyncedBlock(chain, currentBlock);
+      console.log(`   [${chain.toUpperCase()}] Synced to block ${currentBlock}`);
+      
+    } catch (error) {
+      console.error(`   [${chain.toUpperCase()}] Sync error:`, error);
+    }
+  }
+  
+  // 处理 X Layer BridgeOut 事件
+  private async processXLayerEvent(event: any) {
+    try {
+      const [from, to, amount, fee, destChainId, nonce] = event.args;
+      const txHash = event.transactionHash;
+      
+      // 检查是否已存在
+      const existing = this.db.prepare('SELECT tx_hash FROM bridge_transactions WHERE tx_hash = ?').get(txHash);
+      if (existing) return;
+      
+      const destChainNum = Number(destChainId);
+      const toChain = destChainNum === CONTRACTS.bsc.chainId ? 'bsc' : 
+                      destChainNum === CONTRACTS.solana.chainId ? 'solana' : 'bsc';
+      
+      const request: BridgeRequest = {
+        txHash,
+        fromChain: 'xlayer',
+        toChain: toChain as any,
+        from,
+        to,
+        amount: amount.toString(),
+        fee: fee?.toString() || '0',
+        nonce: Number(nonce),
+        status: 'pending',
+        createdAt: new Date(),
+      };
+      
+      this.pendingRequests.set(txHash, request);
+      this.saveToDb(request, fee?.toString() || '0');
+      console.log(`   📥 Loaded historical X Layer event: ${txHash}`);
+      
+      // 处理请求
+      await this.processRequest(request);
+    } catch (e) {
+      console.error('Error processing X Layer event:', e);
+    }
+  }
+  
+  // 处理 X Layer BridgeOutSolana 事件
+  private async processXLayerSolanaEvent(event: any) {
+    try {
+      const [from, solanaAddress, amount, fee, nonce] = event.args;
+      const txHash = event.transactionHash;
+      
+      // 检查是否已存在
+      const existing = this.db.prepare('SELECT tx_hash FROM bridge_transactions WHERE tx_hash = ?').get(txHash);
+      if (existing) return;
+      
+      // 将 bytes32 转换为 Solana 地址
+      const solanaAddressStr = ethers.toUtf8String(solanaAddress).replace(/\0/g, '');
+      
+      const request: BridgeRequest = {
+        txHash,
+        fromChain: 'xlayer',
+        toChain: 'solana',
+        from,
+        to: solanaAddressStr,
+        amount: amount.toString(),
+        fee: fee?.toString() || '0',
+        nonce: Number(nonce),
+        status: 'pending',
+        createdAt: new Date(),
+      };
+      
+      this.pendingRequests.set(txHash, request);
+      this.saveToDb(request, fee?.toString() || '0');
+      console.log(`   📥 Loaded historical X Layer Solana event: ${txHash}`);
+      
+      // 处理请求
+      await this.processRequest(request);
+    } catch (e) {
+      console.error('Error processing X Layer Solana event:', e);
+    }
+  }
+  
+  // 处理 BSC BridgeInitiated 事件
+  private async processBSCEvent(event: any) {
+    try {
+      const [from, to, amount, fee, nonce] = event.args;
+      const txHash = event.transactionHash;
+      
+      // 检查是否已存在
+      const existing = this.db.prepare('SELECT tx_hash FROM bridge_transactions WHERE tx_hash = ?').get(txHash);
+      if (existing) return;
+      
+      const request: BridgeRequest = {
+        txHash,
+        fromChain: 'bsc',
+        toChain: 'xlayer',
+        from,
+        to,
+        amount: amount.toString(),
+        fee: fee?.toString() || '0',
+        nonce: Number(nonce),
+        status: 'pending',
+        createdAt: new Date(),
+      };
+      
+      this.pendingRequests.set(txHash, request);
+      this.saveToDb(request, fee?.toString() || '0');
+      console.log(`   📥 Loaded historical BSC event: ${txHash}`);
+      
+      // 处理请求
+      await this.processRequest(request);
+    } catch (e) {
+      console.error('Error processing BSC event:', e);
+    }
+  }
+  
+  // 处理跨链请求
+  private async processRequest(request: BridgeRequest) {
+    if (request.toChain === 'bsc') {
+      await this.releaseToBSC(request);
+    } else if (request.toChain === 'xlayer') {
+      await this.releaseToXLayer(request);
+    } else if (request.toChain === 'solana') {
+      await this.mintToSolana(request);
+    }
   }
 
   private async listenXLayerEvents() {
@@ -268,6 +480,9 @@ class BridgeRelayerService extends EventEmitter {
       } else if (destChainNum === CONTRACTS.solana.chainId) {
         await this.mintToSolana(request);
       }
+      
+      // 保存区块号
+      this.saveLastSyncedBlock('xlayer', event.log.blockNumber);
     });
 
     // Listen for Solana-specific bridge events
@@ -308,6 +523,9 @@ class BridgeRelayerService extends EventEmitter {
       
       // Process on Solana
       await this.mintToSolana(request);
+      
+      // 保存区块号
+      this.saveLastSyncedBlock('xlayer', event.log.blockNumber);
     });
 
     console.log('👂 Listening for X Layer bridge events (including Solana)...');
@@ -349,6 +567,9 @@ class BridgeRelayerService extends EventEmitter {
       
       // Process on X Layer
       await this.releaseToXLayer(request);
+      
+      // 保存区块号
+      this.saveLastSyncedBlock('bsc', event.log.blockNumber);
     });
 
     console.log('👂 Listening for BSC bridge events...');
