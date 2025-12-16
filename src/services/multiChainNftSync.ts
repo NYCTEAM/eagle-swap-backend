@@ -15,7 +15,7 @@ const CHAIN_CONFIGS: ChainConfig[] = [
   {
     chainId: 196,
     chainName: 'X Layer',
-    rpcUrl: process.env.XLAYER_RPC_URL || 'https://rpc.xlayer.tech',
+    rpcUrl: process.env.XLAYER_RPC_URL || 'https://rpc1.eagleswap.llc/xlayer/',
     nftAddress: process.env.XLAYER_NFT_ADDRESS || '0xfe016c9A9516AcB14d504aE821C46ae2bc968cd7', // Multi-Chain Global
     startBlock: 0
   },

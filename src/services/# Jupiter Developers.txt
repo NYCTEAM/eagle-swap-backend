@@ -1,0 +1,101 @@
+# Jupiter Developers
+
+Skip to main content
+[Jupiter home page](https://dev.jup.ag/)
+- [Blog](https://dev.jup.ag/blog)
+- [Blog](https://dev.jup.ag/blog)
+[Blog](https://dev.jup.ag/blog)
+[Blog](https://dev.jup.ag/blog)
+[Home](https://jupiter.mintlify.app/)
+[Get Started](https://jupiter.mintlify.app/get-started)
+[API Reference](https://jupiter.mintlify.app/api-reference)
+[Tool Kits](https://jupiter.mintlify.app/tool-kits)
+[Resources](https://jupiter.mintlify.app/resources/support)
+[Updates](https://jupiter.mintlify.app/updates)
+- [Dev Portal](https://portal.jup.ag/)
+- [Status](https://status.jup.ag/)
+- [Support](https://discord.gg/jup)
+[Dev Portal](https://portal.jup.ag/)
+[Status](https://status.jup.ag/)
+[Support](https://discord.gg/jup)
+- [Overview](https://jupiter.mintlify.app/api-reference)
+[Overview](https://jupiter.mintlify.app/api-reference)
+
+##### API Reference
+- Ultra Swap
+- Legacy SwapOverviewGETquotePOSTswapPOSTswap-instructions[GETprogram-id-to-label](https://jupiter.mintlify.app/api-reference/swap/program-id-to-label)
+- [Overview](https://jupiter.mintlify.app/api-reference/swap)
+- [GETquote](https://jupiter.mintlify.app/api-reference/swap/quote)
+- [POSTswap](https://jupiter.mintlify.app/api-reference/swap/swap)
+- [POSTswap-instructions](https://jupiter.mintlify.app/api-reference/swap/swap-instructions)
+- [GETprogram-id-to-label](https://jupiter.mintlify.app/api-reference/swap/program-id-to-label)
+- LendBETA
+- Trigger
+- Recurring
+- Tokens
+- Price
+- SendBETA
+- StudioBETA
+- [Overview](https://jupiter.mintlify.app/api-reference/swap)
+- [GETquote](https://jupiter.mintlify.app/api-reference/swap/quote)
+- [POSTswap](https://jupiter.mintlify.app/api-reference/swap/swap)
+- [POSTswap-instructions](https://jupiter.mintlify.app/api-reference/swap/swap-instructions)
+- [GETprogram-id-to-label](https://jupiter.mintlify.app/api-reference/swap/program-id-to-label)
+[Overview](https://jupiter.mintlify.app/api-reference/swap)
+[GETquote](https://jupiter.mintlify.app/api-reference/swap/quote)
+[POSTswap](https://jupiter.mintlify.app/api-reference/swap/swap)
+[POSTswap-instructions](https://jupiter.mintlify.app/api-reference/swap/swap-instructions)
+[GETprogram-id-to-label](https://jupiter.mintlify.app/api-reference/swap/program-id-to-label)
+
+# Legacy Swap API
+Overview of Jupiter Legacy Swap API
+[quoteRequest for a quote to be used in POST /swap](https://jupiter.mintlify.app/api-reference/swap/quote)
+
+## quote
+
+```
+POST /swap
+```
+
+[swapRequest for a base64-encoded unsigned swap transaction based on the /quote response](https://jupiter.mintlify.app/api-reference/swap/swap)
+
+## swap
+
+```
+/quote
+```
+
+[swap-instructionsRequest for swap instructions that you can use from the quote you get from /quote](https://jupiter.mintlify.app/api-reference/swap/swap-instructions)
+
+## swap-instructions
+
+```
+/quote
+```
+
+[program-id-to-labelReturns a hash, which key is the program id and value is the label.](https://jupiter.mintlify.app/api-reference/swap/program-id-to-label)
+
+## program-id-to-label
+[Balances (Deprecated)](https://jupiter.mintlify.app/api-reference/ultra/balances)
+[quote](https://jupiter.mintlify.app/api-reference/swap/quote)
+[Jupiter home page](https://dev.jup.ag/)
+[x](https://x.com/JupiterExchange)
+[discord](https://discord.gg/jup)
+[telegram](https://t.me/jup_dev)
+[github](https://github.com/jup-ag)
+[youtube](https://www.youtube.com/@Jupiter-Exchange)
+[Support](https://dev.jup.ag/resources/support)
+[Guidelines](https://dev.jup.ag/legal)
+[Legal](https://dev.jup.ag/legal/sdk-api-license-agreement)
+[Brand Kit](https://dev.jup.ag/resources/brand-kit)
+[x](https://x.com/JupiterExchange)
+[discord](https://discord.gg/jup)
+[telegram](https://t.me/jup_dev)
+[github](https://github.com/jup-ag)
+[youtube](https://www.youtube.com/@Jupiter-Exchange)
+[x](https://x.com/JupiterExchange)
+[discord](https://discord.gg/jup)
+[telegram](https://t.me/jup_dev)
+[github](https://github.com/jup-ag)
+[youtube](https://www.youtube.com/@Jupiter-Exchange)
+[Powered by Mintlify](https://www.mintlify.com?utm_campaign=poweredBy&utm_medium=referral&utm_source=jupiter)

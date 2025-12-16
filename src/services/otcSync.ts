@@ -16,9 +16,9 @@ class OTCSync {
     // X Layer USDT: 6 decimals, BSC USDT: 18 decimals
     this.usdtDecimals = chainId === 196 ? 6 : 18;
     
-    // 初始化RPC连接
+    // 初始化RPC连接 - 优先使用自建节点
     const rpcUrl = chainId === 196 
-      ? (process.env.X_LAYER_RPC_URL || 'https://rpc.xlayer.tech')
+      ? (process.env.X_LAYER_RPC_URL || 'https://rpc1.eagleswap.llc/xlayer/')
       : (process.env.BSC_RPC_URL || 'https://rpc1.eagleswap.llc/bsc/');
     
     this.provider = new ethers.JsonRpcProvider(rpcUrl);

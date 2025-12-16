@@ -58,7 +58,7 @@ const CHAIN_CONFIGS = [
   {
     chainId: 196,
     chainName: 'X Layer',
-    rpcUrl: process.env.XLAYER_RPC_URL || 'https://rpc.xlayer.tech',
+    rpcUrl: process.env.XLAYER_RPC_URL || 'https://rpc1.eagleswap.llc/xlayer/',
     marketplaceAddress: '0x33d0D4a3fFC727f51d1A91d0d1eDA290193D5Df1',
     nftAddress: '0xfe016c9A9516AcB14d504aE821C46ae2bc968cd7',
     usdtDecimals: 6

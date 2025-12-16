@@ -10,7 +10,7 @@ import bs58 from 'bs58';
 const CONTRACTS = {
   xlayer: {
     chainId: 196,
-    rpc: process.env.XLAYER_RPC_URL || 'https://rpc.xlayer.tech',
+    rpc: process.env.XLAYER_RPC_URL || 'https://rpc1.eagleswap.llc/xlayer/',
     token: '0xdd9B82048D2408D69374Aecb6Cf65e66754c95bc',
     bridge: '0xC8ae328157941C5e8ce47756C71B97a93232Da3b', // V2 with Solana support
   },
@@ -22,7 +22,7 @@ const CONTRACTS = {
   },
   solana: {
     chainId: 501, // Custom chain ID for Solana
-    rpc: process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
+    rpc: process.env.SOLANA_RPC_URL || 'https://rpc1.eagleswap.llc/sol/',
     token: 'ESZCBFmiArHThvQGKWn6pAZgC88TcVA3G6QxUwjyT8cH', // EAGLE Token (Token-2022 with metadata)
     decimals: 9,
     program: 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb', // Token-2022 program

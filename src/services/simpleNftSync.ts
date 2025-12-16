@@ -8,9 +8,9 @@ class SimpleNFTSync {
   private marketplaceContract: ethers.Contract | null = null;
 
   constructor() {
-    // 初始化RPC连接 - 优先使用环境变量，其次自定义RPC，最后使用官方RPC作为兜底
+    // 初始化RPC连接 - 优先使用自建节点，公共节点作为备用
     const rpcUrl = process.env.X_LAYER_RPC_URL || 'https://rpc1.eagleswap.llc/xlayer/';
-    const fallbackRpc = 'https://rpc.xlayer.tech';
+    const fallbackRpc = 'https://rpc.xlayer.tech'; // 公共节点备用
     
     try {
         this.provider = new ethers.JsonRpcProvider(rpcUrl);
