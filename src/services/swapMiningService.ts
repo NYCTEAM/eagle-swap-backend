@@ -8,6 +8,8 @@ export class SwapMiningService {
   
   /**
    * 记录交易并计算奖励
+   * 使用加法叠加方式: 总加成% = NFT加成% + VIP加成% + 社区加成%
+   * 最终奖励 = 基础奖励 × (总加成% / 100)
    */
   async recordSwap(params: {
     txHash: string;
@@ -37,16 +39,14 @@ export class SwapMiningService {
       // 计算基础奖励
       const baseReward = params.tradeValueUsdt * config.reward_rate;
       
-      // 获取用户 NFT 权重并计算加成
-      let eagleReward = baseReward;
-      let nftMultiplier = 1.0;
+      // ============================================
+      // 1. 获取 NFT 加成% (从 nft_level_bonus.bonus_multiplier × 100)
+      // ============================================
+      let nftBoostPercent = 0; // 没有 NFT 时为 0%
       let nftLevel = 0;
+      let nftTierName = 'None';
       
       if (config.nft_bonus_enabled) {
-        // 查询用户最高等级 NFT 的固定倍数 (从 nft_holders + nft_level_bonus 表)
-        // 注意：如果没有 nft_level_bonus 表，我们使用 nft_level_stats 中的 weight 作为基础，或者默认倍数
-        // 这里假设 nft_level_bonus 仍然用于存储具体的挖矿倍数配置
-        
         let topNft: any = null;
         
         try {
@@ -54,7 +54,8 @@ export class SwapMiningService {
           topNft = db.prepare(`
             SELECT 
               n.level,
-              nb.bonus_multiplier
+              nb.bonus_multiplier,
+              nb.nft_tier_name
             FROM nft_holders n
             LEFT JOIN nft_level_bonus nb ON n.level = nb.nft_level
             WHERE LOWER(n.owner_address) = LOWER(?)
@@ -62,45 +63,129 @@ export class SwapMiningService {
             LIMIT 1
           `).get(params.userAddress);
         } catch (e) {
-          // 如果查询失败（例如表不存在），回退到旧表
-          console.warn('Failed to query nft_holders for mining bonus, falling back to user_nfts:', e);
-          topNft = db.prepare(`
-            SELECT 
-              n.level,
-              nb.bonus_multiplier
-            FROM user_nfts n
-            LEFT JOIN nft_level_bonus nb ON n.level = nb.nft_level
-            WHERE LOWER(n.owner_address) = LOWER(?)
-            ORDER BY n.level DESC
-            LIMIT 1
-          `).get(params.userAddress.toLowerCase());
+          // 回退到 user_nfts 表
+          try {
+            topNft = db.prepare(`
+              SELECT 
+                n.level,
+                nb.bonus_multiplier,
+                nb.nft_tier_name
+              FROM user_nfts n
+              LEFT JOIN nft_level_bonus nb ON n.level = nb.nft_level
+              WHERE LOWER(n.owner_address) = LOWER(?)
+              ORDER BY n.level DESC
+              LIMIT 1
+            `).get(params.userAddress.toLowerCase());
+          } catch (e2) {
+            console.warn('Failed to query NFT for mining bonus:', e2);
+          }
         }
         
         if (topNft && topNft.bonus_multiplier) {
           nftLevel = topNft.level;
-          nftMultiplier = topNft.bonus_multiplier;
+          nftTierName = topNft.nft_tier_name || `Level ${nftLevel}`;
+          // bonus_multiplier 是倍数 (如 2.05)，转换为百分比 (205%)
+          nftBoostPercent = topNft.bonus_multiplier * 100;
         } else if (topNft && topNft.level) {
-          // 如果没有找到 bonus_multiplier 但找到了 NFT（说明表数据缺失或使用旧逻辑）
-          // 使用默认逻辑：Weight 1 = 0.1% 加成 (multiplier = 1.001)
-          // 或者根据 Level 计算
-          
-          // 尝试查询该等级的 Weight
-          const levelStat = db.prepare('SELECT weight FROM nft_level_stats WHERE level = ?').get(topNft.level) as any;
-          const weight = levelStat ? levelStat.weight : 1; // 默认 weight 1
-          
+          // 使用默认倍数
           nftLevel = topNft.level;
-          // 假设每 1 Weight 增加 0.1% 加成
-          const bonusPercent = weight * 0.1; 
-          nftMultiplier = 1 + (bonusPercent / 100);
-          
-          console.log(`Using default NFT bonus calculation: Level ${nftLevel}, Weight ${weight}, Bonus ${bonusPercent}%, Multiplier ${nftMultiplier}`);
+          const defaultMultipliers: { [key: number]: number } = {
+            1: 2.05, 2: 2.20, 3: 2.35, 4: 2.50, 5: 2.70, 6: 2.85, 7: 3.50
+          };
+          nftBoostPercent = (defaultMultipliers[nftLevel] || 1) * 100;
+          nftTierName = `Level ${nftLevel}`;
         }
+      }
+      
+      // ============================================
+      // 2. 获取 VIP 加成% (从 vip_levels.boost_percentage)
+      // ============================================
+      let vipBoostPercent = 100; // 默认 Bronze = 100%
+      let vipLevel = 0;
+      let vipName = 'Bronze';
+      
+      if (config.vip_bonus_enabled) {
+        try {
+          // 获取用户累计交易量
+          const volumeData = db.prepare(`
+            SELECT COALESCE(SUM(trade_value_usdt), 0) as total_volume
+            FROM swap_transactions
+            WHERE LOWER(user_address) = LOWER(?)
+          `).get(params.userAddress) as any;
           
-        if (nftLevel > 0) {
-          // NFT 加成：基础奖励 * NFT倍数（不包含VIP，VIP在其他地方计算）
-          eagleReward = baseReward * nftMultiplier;
+          const cumulativeVolume = (volumeData?.total_volume || 0) + params.tradeValueUsdt;
           
-          // 记录 NFT 加成日志
+          // 获取 VIP 等级
+          const vipData = db.prepare(`
+            SELECT vip_level, vip_name, boost_percentage
+            FROM vip_levels
+            WHERE min_volume_usdt <= ?
+            ORDER BY min_volume_usdt DESC
+            LIMIT 1
+          `).get(cumulativeVolume) as any;
+          
+          if (vipData) {
+            vipLevel = vipData.vip_level;
+            vipName = vipData.vip_name;
+            vipBoostPercent = vipData.boost_percentage;
+          }
+        } catch (e) {
+          console.warn('Failed to query VIP level:', e);
+        }
+      }
+      
+      // ============================================
+      // 3. 获取社区加成% (从 community_level_config)
+      // ============================================
+      let communityBoostPercent = 0; // 没有加入社区时为 0%
+      let communityLevel = 0;
+      let communityName = '';
+      let isLeader = false;
+      
+      try {
+        // 查询用户所在社区
+        const memberData = db.prepare(`
+          SELECT 
+            cm.community_id,
+            cm.is_leader,
+            c.community_name,
+            c.community_level,
+            clc.member_bonus_rate,
+            clc.leader_bonus_rate
+          FROM community_members cm
+          JOIN communities c ON cm.community_id = c.id
+          LEFT JOIN community_level_config clc ON c.community_level = clc.level
+          WHERE LOWER(cm.member_address) = LOWER(?)
+        `).get(params.userAddress) as any;
+        
+        if (memberData) {
+          communityLevel = memberData.community_level || 1;
+          communityName = memberData.community_name || '';
+          isLeader = memberData.is_leader === 1;
+          // 团队长用 leader_bonus_rate，成员用 member_bonus_rate
+          communityBoostPercent = isLeader 
+            ? (memberData.leader_bonus_rate || 0) 
+            : (memberData.member_bonus_rate || 0);
+        }
+      } catch (e) {
+        console.warn('Failed to query community bonus:', e);
+      }
+      
+      // ============================================
+      // 4. 计算总加成% (加法叠加)
+      // ============================================
+      const totalBoostPercent = nftBoostPercent + vipBoostPercent + communityBoostPercent;
+      const totalMultiplier = totalBoostPercent / 100;
+      
+      // 最终奖励 = 基础奖励 × (总加成% / 100)
+      const eagleReward = baseReward * totalMultiplier;
+      
+      console.log(`📊 加成计算: NFT ${nftBoostPercent}% + VIP ${vipBoostPercent}% + 社区 ${communityBoostPercent}% = ${totalBoostPercent}%`);
+      console.log(`🎁 奖励计算: ${baseReward.toFixed(6)} × ${totalMultiplier.toFixed(2)} = ${eagleReward.toFixed(6)} EAGLE`);
+      
+      // 记录加成日志
+      if (nftLevel > 0 || communityLevel > 0) {
+        try {
           db.prepare(`
             INSERT INTO swap_mining_nft_bonus_log 
             (user_address, tx_hash, base_reward, nft_weight, bonus_percent, bonus_amount, final_reward)
@@ -110,12 +195,12 @@ export class SwapMiningService {
             params.txHash,
             baseReward,
             nftLevel,
-            (nftMultiplier - 1) * 100, // 转换为加成百分比
+            totalBoostPercent - 100, // 额外加成百分比
             eagleReward - baseReward,
             eagleReward
           );
-          
-          console.log(`🎁 NFT 加成: Level ${nftLevel} → ${nftMultiplier}x → ${eagleReward.toFixed(4)} EAGLE (基础 ${baseReward.toFixed(4)})`);
+        } catch (e) {
+          console.warn('Failed to log bonus:', e);
         }
       }
       
@@ -156,7 +241,7 @@ export class SwapMiningService {
       // 更新每日统计
       await this.updateDailyStats(params.tradeValueUsdt, feeUsdt, eagleReward);
       
-      console.log(`✅ 交易记录成功: ${params.tradeValueUsdt} USDT → ${eagleReward.toFixed(4)} EAGLE`);
+      console.log(`✅ 交易记录成功: $${params.tradeValueUsdt.toFixed(2)} → ${eagleReward.toFixed(6)} EAGLE (${totalBoostPercent}%)`);
       
       return {
         success: true,
@@ -165,8 +250,21 @@ export class SwapMiningService {
           tradeValue: params.tradeValueUsdt,
           fee: feeUsdt,
           baseReward: baseReward,
+          // NFT 加成
           nftLevel: nftLevel,
-          nftMultiplier: nftMultiplier,
+          nftTierName: nftTierName,
+          nftBoostPercent: nftBoostPercent,
+          // VIP 加成
+          vipLevel: vipLevel,
+          vipName: vipName,
+          vipBoostPercent: vipBoostPercent,
+          // 社区加成
+          communityLevel: communityLevel,
+          communityName: communityName,
+          isLeader: isLeader,
+          communityBoostPercent: communityBoostPercent,
+          // 总计
+          totalBoostPercent: totalBoostPercent,
           bonusAmount: eagleReward - baseReward,
           eagleReward: eagleReward,
         }
