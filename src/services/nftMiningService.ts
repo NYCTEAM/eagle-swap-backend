@@ -22,8 +22,8 @@ const PROJECT_START_DATE = new Date('2025-01-01');
 
 // 多链合约地址配置
 const CONTRACT_ADDRESSES: Record<number, string> = {
-  196: '0xf3EB7739B8a756a79D84335DC7f8AF10B5906Ab5',  // X Layer
-  56: '0x19086529b5824742E182A17073F2F7648392B237',   // BSC
+  196: '0x48a8f56e9dc2b182940fca241fb9c85dfa9e274f',  // X Layer
+  56: '0x1c5fD42F77F5D331F08174b1e9dA6E3986cc8364',   // BSC
 };
 
 export class NFTMiningService {
