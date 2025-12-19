@@ -281,196 +281,11 @@ abstract contract ReentrancyGuard {
     }
 }
 
-// IERC20
-interface IERC20 {
-    event Transfer(address indexed from, address indexed to, uint256 value);
-    event Approval(address indexed owner, address indexed spender, uint256 value);
-
-    function totalSupply() external view returns (uint256);
-    function balanceOf(address account) external view returns (uint256);
-    function transfer(address to, uint256 value) external returns (bool);
-    function allowance(address owner, address spender) external view returns (uint256);
-    function approve(address spender, uint256 value) external returns (bool);
-    function transferFrom(address from, address to, uint256 value) external returns (bool);
-}
-
-// IERC20Metadata
-interface IERC20Metadata is IERC20 {
-    function name() external view returns (string memory);
-    function symbol() external view returns (string memory);
-    function decimals() external view returns (uint8);
-}
-
-// IERC20Errors
-interface IERC20Errors {
-    error ERC20InsufficientBalance(address sender, uint256 balance, uint256 needed);
-    error ERC20InvalidSender(address sender);
-    error ERC20InvalidReceiver(address receiver);
-    error ERC20InsufficientAllowance(address spender, uint256 allowance, uint256 needed);
-    error ERC20InvalidApprover(address approver);
-    error ERC20InvalidSpender(address spender);
-}
-
-// ERC20
-abstract contract ERC20 is Context, IERC20, IERC20Metadata, IERC20Errors {
-    mapping(address account => uint256) private _balances;
-    mapping(address account => mapping(address spender => uint256)) private _allowances;
-
-    uint256 private _totalSupply;
-    string private _name;
-    string private _symbol;
-
-    constructor(string memory name_, string memory symbol_) {
-        _name = name_;
-        _symbol = symbol_;
-    }
-
-    function name() public view virtual returns (string memory) {
-        return _name;
-    }
-
-    function symbol() public view virtual returns (string memory) {
-        return _symbol;
-    }
-
-    function decimals() public view virtual returns (uint8) {
-        return 18;
-    }
-
-    function totalSupply() public view virtual returns (uint256) {
-        return _totalSupply;
-    }
-
-    function balanceOf(address account) public view virtual returns (uint256) {
-        return _balances[account];
-    }
-
-    function transfer(address to, uint256 value) public virtual returns (bool) {
-        address owner = _msgSender();
-        _transfer(owner, to, value);
-        return true;
-    }
-
-    function allowance(address owner, address spender) public view virtual returns (uint256) {
-        return _allowances[owner][spender];
-    }
-
-    function approve(address spender, uint256 value) public virtual returns (bool) {
-        address owner = _msgSender();
-        _approve(owner, spender, value);
-        return true;
-    }
-
-    function transferFrom(address from, address to, uint256 value) public virtual returns (bool) {
-        address spender = _msgSender();
-        _spendAllowance(from, spender, value);
-        _transfer(from, to, value);
-        return true;
-    }
-
-    function _transfer(address from, address to, uint256 value) internal {
-        if (from == address(0)) {
-            revert ERC20InvalidSender(address(0));
-        }
-        if (to == address(0)) {
-            revert ERC20InvalidReceiver(address(0));
-        }
-        _update(from, to, value);
-    }
-
-    function _update(address from, address to, uint256 value) internal virtual {
-        if (from == address(0)) {
-            _totalSupply += value;
-        } else {
-            uint256 fromBalance = _balances[from];
-            if (fromBalance < value) {
-                revert ERC20InsufficientBalance(from, fromBalance, value);
-            }
-            unchecked {
-                _balances[from] = fromBalance - value;
-            }
-        }
-
-        if (to == address(0)) {
-            unchecked {
-                _totalSupply -= value;
-            }
-        } else {
-            unchecked {
-                _balances[to] += value;
-            }
-        }
-
-        emit Transfer(from, to, value);
-    }
-
-    function _mint(address account, uint256 value) internal {
-        if (account == address(0)) {
-            revert ERC20InvalidReceiver(address(0));
-        }
-        _update(address(0), account, value);
-    }
-
-    function _burn(address account, uint256 value) internal {
-        if (account == address(0)) {
-            revert ERC20InvalidSender(address(0));
-        }
-        _update(account, address(0), value);
-    }
-
-    function _approve(address owner, address spender, uint256 value) internal {
-        _approve(owner, spender, value, true);
-    }
-
-    function _approve(address owner, address spender, uint256 value, bool emitEvent) internal virtual {
-        if (owner == address(0)) {
-            revert ERC20InvalidApprover(address(0));
-        }
-        if (spender == address(0)) {
-            revert ERC20InvalidSpender(address(0));
-        }
-        _allowances[owner][spender] = value;
-        if (emitEvent) {
-            emit Approval(owner, spender, value);
-        }
-    }
-
-    function _spendAllowance(address owner, address spender, uint256 value) internal virtual {
-        uint256 currentAllowance = allowance(owner, spender);
-        if (currentAllowance != type(uint256).max) {
-            if (currentAllowance < value) {
-                revert ERC20InsufficientAllowance(spender, currentAllowance, value);
-            }
-            unchecked {
-                _approve(owner, spender, currentAllowance - value, false);
-            }
-        }
-    }
-}
-
-// ERC20Burnable
-abstract contract ERC20Burnable is Context, ERC20 {
-    function burn(uint256 value) public virtual {
-        _burn(_msgSender(), value);
-    }
-
-    function burnFrom(address account, uint256 value) public virtual {
-        _spendAllowance(account, _msgSender(), value);
-        _burn(account, value);
-    }
-}
-
-// ============ DEX Interfaces ============
+// ============ Uniswap V2 Interfaces ============
 
 interface IUniswapV2Factory {
     function createPair(address tokenA, address tokenB) external returns (address pair);
     function getPair(address tokenA, address tokenB) external view returns (address pair);
-}
-
-interface IUniswapV2Pair {
-    function token0() external view returns (address);
-    function token1() external view returns (address);
-    function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
 }
 
 interface IUniswapV2Router02 {
@@ -487,23 +302,27 @@ interface IUniswapV2Router02 {
     ) external;
 }
 
-// ============ EAGLE Token BSC ============
+interface IUniswapV2Pair {
+    function token0() external view returns (address);
+    function token1() external view returns (address);
+    function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
+}
+
+// ============ EAGLEToken_XLayer_Secure Contract ============
 
 /**
- * @title EAGLEToken_BSC_Secure
- * @notice Mapped Token on BSC (Secure version with Tax, Protection & Bridge Minting)
+ * @title EAGLEToken_XLayer_Secure
+ * @notice Native Token on X Layer
  */
-contract EAGLEToken_BSC_Secure is ERC20, ERC20Burnable, Ownable, ReentrancyGuard {
+contract EAGLEToken_XLayer_Secure is ERC20, ERC20Burnable, Ownable, ReentrancyGuard {
     
+    uint256 public constant MAX_SUPPLY = 1_000_000_000 * 10**18;
     uint256 public constant MAX_TAX = 600; // 6% max total tax
     uint256 public constant MAX_SINGLE_TAX = 200; // 2% max per tax type
     
     address public marketingWallet;
     address public constant DEAD = 0x000000000000000000000000000000000000dEaD;
     
-    // Bridge Address (Authorized Minter)
-    address public bridge;
-
     // Tax config
     uint256 public marketingTax = 0;
     uint256 public burnTax = 0;
@@ -521,12 +340,15 @@ contract EAGLEToken_BSC_Secure is ERC20, ERC20Burnable, Ownable, ReentrancyGuard
     
     // Swap config
     bool public swapTaxEnabled = true;
-    uint256 public swapTaxAtAmount = 1000 * 10**18;
+    uint256 public swapTaxAtAmount = 1000 * 10**18; 
     uint256 public accumulatedTaxTokens = 0;
     uint256 public constant MAX_ACCUMULATED_TAX = 10_000_000 * 10**18;
     uint256 public constant MAX_SLIPPAGE_BPS = 600; // 6% maximum slippage protection
     uint256 public constant SWAP_DEADLINE = 300;
     bool private swapping;
+    
+    // Known Uniswap V2 Pair bytecode hash (mainnet)
+    bytes32 public constant UNISWAP_V2_PAIR_INIT_CODE_HASH = 0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f;
     
     // DEX config
     IUniswapV2Router02 public router;
@@ -547,9 +369,6 @@ contract EAGLEToken_BSC_Secure is ERC20, ERC20Burnable, Ownable, ReentrancyGuard
     event TaxQuoteTokenSet(address indexed token);
     event TaxSwapped(uint256 tokensSwapped, uint256 amountReceived, address currency);
     event TaxSwapFailed(uint256 amount);
-    event BridgeSet(address indexed bridge);
-    event TaxSentToMarketing(uint256 amount);
-    event TaxLocked();
     
     constructor(
         address _router,
@@ -594,7 +413,7 @@ contract EAGLEToken_BSC_Secure is ERC20, ERC20Burnable, Ownable, ReentrancyGuard
         // Single unconditional assignment to immutable
         mainPair = _mainPair;
         
-        // No initial mint (handled by Bridge)
+        _mint(msg.sender, MAX_SUPPLY);
         
         isExcludedFromFee[msg.sender] = true;
         isExcludedFromFee[address(this)] = true;
@@ -603,31 +422,6 @@ contract EAGLEToken_BSC_Secure is ERC20, ERC20Burnable, Ownable, ReentrancyGuard
     }
     
     receive() external payable {}
-
-    // ========== Cross-Chain Sync ==========
-
-    function setBridge(address _bridge) external onlyOwner {
-        require(_bridge != address(0), "Invalid bridge");
-        bridge = _bridge;
-        isExcludedFromFee[_bridge] = true; 
-        emit BridgeSet(_bridge);
-    }
-
-    /**
-     * @dev Bridge callback for cross-chain token sync
-     * Only callable by authorized bridge contract
-     */
-    function bridgeIn(address to, uint256 amount) external {
-        require(msg.sender == bridge, "Unauthorized");
-        _mint(to, amount);
-    }
-    
-    /**
-     * @dev Prepare tokens for cross-chain transfer
-     */
-    function bridgeOut(uint256 amount) external {
-        _burn(msg.sender, amount);
-    }
     
     /**
      * @notice Enable trading. One-way switch.
@@ -637,9 +431,7 @@ contract EAGLEToken_BSC_Secure is ERC20, ERC20Burnable, Ownable, ReentrancyGuard
         tradingEnabled = true;
         emit TradingEnabled();
     }
-    
-    // ========== Core Transfer Logic ==========
-    
+
     function _update(
         address from,
         address to,
@@ -657,7 +449,7 @@ contract EAGLEToken_BSC_Secure is ERC20, ERC20Burnable, Ownable, ReentrancyGuard
             super._update(from, to, amount);
             return;
         }
-        
+
         // Trading Check
         if (!tradingEnabled) {
             // Allow normal transfers, but restrict DEX trading
@@ -666,20 +458,18 @@ contract EAGLEToken_BSC_Secure is ERC20, ERC20Burnable, Ownable, ReentrancyGuard
             }
         }
         
-        // Auto SwapBack Trigger (on Sell)
+        // Auto SwapBack
         if (
             accumulatedTaxTokens >= swapTaxAtAmount &&
             !swapping &&
             swapTaxEnabled &&
-            !automatedMarketMakerPairs[from] && 
-            automatedMarketMakerPairs[to]       
+            !automatedMarketMakerPairs[from] // Sell
         ) {
             swapping = true;
             _swapTax(swapTaxAtAmount);
             swapping = false;
         }
         
-        // Calculate Tax
         bool takeFee = !swapping &&
             !isExcludedFromFee[from] &&
             !isExcludedFromFee[to] &&
@@ -689,29 +479,21 @@ contract EAGLEToken_BSC_Secure is ERC20, ERC20Burnable, Ownable, ReentrancyGuard
             
         if (takeFee) {
             uint256 fees = (amount * totalTax) / 10000;
-            uint256 amountToBurn = 0;
-            
             if (burnTax > 0) {
-                amountToBurn = (amount * burnTax) / 10000;
-                _burn(from, amountToBurn);
-                fees -= amountToBurn; 
+                uint256 burnAmount = (amount * burnTax) / 10000;
+                _burn(from, burnAmount);
+                fees -= burnAmount; 
             }
-            
             if (fees > 0) {
                 super._update(from, address(this), fees);
-                uint256 newAccumulated = accumulatedTaxTokens + fees;
-                if (newAccumulated <= MAX_ACCUMULATED_TAX) {
-                    accumulatedTaxTokens = newAccumulated;
-                }
+                accumulatedTaxTokens += fees;
+                if (accumulatedTaxTokens > MAX_ACCUMULATED_TAX) accumulatedTaxTokens = MAX_ACCUMULATED_TAX;
             }
-            
             amount -= (amount * totalTax) / 10000;
         }
         
         super._update(from, to, amount);
     }
-    
-    // ========== SwapBack Implementation ==========
     
     /**
      * @dev Internal swap function with reentrancy protection via swapping flag
@@ -744,40 +526,16 @@ contract EAGLEToken_BSC_Secure is ERC20, ERC20Burnable, Ownable, ReentrancyGuard
         
         // Dynamic deadline
         uint256 deadline = block.timestamp + SWAP_DEADLINE;
-        bool isNative = taxQuoteToken == router.WETH();
         
-        // INTERACTIONS - External calls last
-        if (isNative) {
-            uint256 initialBalance = address(this).balance;
-            try router.swapExactTokensForETHSupportingFeeOnTransferTokens(
-                amountToSwap, amountOutMin, path, address(this), deadline
-            ) {
-                uint256 received = address(this).balance - initialBalance;
-                emit TaxSwapped(amountToSwap, received, address(0));
-                if (received > 0) {
-                    (bool success, ) = payable(marketingWallet).call{value: received}("");
-                    if (success) emit TaxSentToMarketing(received);
-                }
-            } catch {
-                // Restore state on failure
-                accumulatedTaxTokens += amountToSwap;
-                emit TaxSwapFailed(amountToSwap);
-            }
-        } else {
-            uint256 initialBalance = IERC20(taxQuoteToken).balanceOf(address(this));
-            try router.swapExactTokensForTokensSupportingFeeOnTransferTokens(
-                amountToSwap, amountOutMin, path, address(this), deadline
-            ) {
-                uint256 received = IERC20(taxQuoteToken).balanceOf(address(this)) - initialBalance;
-                emit TaxSwapped(amountToSwap, received, taxQuoteToken);
-                if (received > 0) {
-                    IERC20(taxQuoteToken).transfer(marketingWallet, received);
-                }
-            } catch {
-                // Restore state on failure
-                accumulatedTaxTokens += amountToSwap;
-                emit TaxSwapFailed(amountToSwap);
-            }
+        // INTERACTIONS - External call last
+        try router.swapExactTokensForTokensSupportingFeeOnTransferTokens(
+            amountToSwap, amountOutMin, path, marketingWallet, deadline
+        ) {
+            emit TaxSwapped(amountToSwap, amountOutMin, taxQuoteToken);
+        } catch {
+            // Restore state on failure
+            accumulatedTaxTokens += amountToSwap;
+            emit TaxSwapFailed(amountToSwap);
         }
     }
     
@@ -826,43 +584,32 @@ contract EAGLEToken_BSC_Secure is ERC20, ERC20Burnable, Ownable, ReentrancyGuard
         }
     }
 
-    // ========== Admin Functions ==========
-    
+    // Admin Functions
     function updateMarketingWallet(address _wallet) external onlyOwner {
-        require(_wallet != address(0), "Invalid address");
         marketingWallet = _wallet;
         isExcludedFromFee[_wallet] = true;
         emit MarketingWalletUpdated(_wallet);
     }
     
     function updateTaxRates(uint256 _marketing, uint256 _burn, uint256 _liquidity) external onlyOwner {
-        require(_marketing <= MAX_SINGLE_TAX, "Marketing tax too high");
-        require(_burn <= MAX_SINGLE_TAX, "Burn tax too high");
-        require(_liquidity <= MAX_SINGLE_TAX, "Liquidity tax too high");
-        
         uint256 newTotal = _marketing + _burn + _liquidity;
-        require(newTotal <= MAX_TAX, "Total tax exceeds limit");
-        
-        if (taxLocked) {
-            require(newTotal <= totalTax, "Cannot increase tax after lock");
-        }
+        require(newTotal <= MAX_TAX, "Tax too high");
+        if (taxLocked) require(newTotal <= totalTax, "Locked");
         
         marketingTax = _marketing;
         burnTax = _burn;
         liquidityTax = _liquidity;
         totalTax = newTotal;
-        
+        if (newTotal > maxTaxEverSet) maxTaxEverSet = newTotal;
         emit TaxUpdated(_marketing, _burn, _liquidity);
     }
     
     function setTaxQuoteToken(address _token) external onlyOwner {
-        require(_token != address(0), "Invalid token");
         taxQuoteToken = _token;
         emit TaxQuoteTokenSet(_token);
     }
     
     function addRouter(address _router) external onlyOwner {
-        require(_router != address(0), "Invalid router");
         if (!isRouter[_router]) {
             isRouter[_router] = true;
             allRouters.push(_router);
@@ -896,7 +643,6 @@ contract EAGLEToken_BSC_Secure is ERC20, ERC20Burnable, Ownable, ReentrancyGuard
     
     function lockTax() external onlyOwner {
         taxLocked = true;
-        emit TaxLocked();
     }
 
     function setSwapThreshold(uint256 _amount) external onlyOwner {
@@ -907,12 +653,7 @@ contract EAGLEToken_BSC_Secure is ERC20, ERC20Burnable, Ownable, ReentrancyGuard
         isExcludedFromFee[account] = excluded;
     }
     
-    function rescueToken(address _token, uint256 _amount) external onlyOwner {
-        require(_token != address(this), "Cannot rescue EAGLE");
-        IERC20(_token).transfer(msg.sender, _amount);
-    }
-    
-    function rescueETH() external onlyOwner {
-        payable(msg.sender).transfer(address(this).balance);
+    function getCirculatingSupply() external view returns (uint256) {
+        return totalSupply() - balanceOf(DEAD) - balanceOf(address(0));
     }
 }

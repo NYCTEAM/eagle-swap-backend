@@ -324,6 +324,28 @@ library ECDSA {
     }
 }
 
+// Strings (minimal for MessageHashUtils)
+library Strings {
+    function toString(uint256 value) internal pure returns (string memory) {
+        if (value == 0) {
+            return "0";
+        }
+        uint256 temp = value;
+        uint256 digits;
+        while (temp != 0) {
+            digits++;
+            temp /= 10;
+        }
+        bytes memory buffer = new bytes(digits);
+        while (value != 0) {
+            digits -= 1;
+            buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
+            value /= 10;
+        }
+        return string(buffer);
+    }
+}
+
 // MessageHashUtils
 library MessageHashUtils {
     function toEthSignedMessageHash(bytes32 messageHash) internal pure returns (bytes32 digest) {
@@ -351,28 +373,6 @@ library MessageHashUtils {
             mstore(add(ptr, 0x22), structHash)
             digest := keccak256(ptr, 0x42)
         }
-    }
-}
-
-// Strings (minimal for MessageHashUtils)
-library Strings {
-    function toString(uint256 value) internal pure returns (string memory) {
-        if (value == 0) {
-            return "0";
-        }
-        uint256 temp = value;
-        uint256 digits;
-        while (temp != 0) {
-            digits++;
-            temp /= 10;
-        }
-        bytes memory buffer = new bytes(digits);
-        while (value != 0) {
-            digits -= 1;
-            buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
-            value /= 10;
-        }
-        return string(buffer);
     }
 }
 

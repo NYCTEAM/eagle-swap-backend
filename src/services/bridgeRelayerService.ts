@@ -11,14 +11,14 @@ const CONTRACTS = {
   xlayer: {
     chainId: 196,
     rpc: process.env.XLAYER_RPC_URL || 'https://rpc1.eagleswap.llc/xlayer/',
-    token: '0x9fF9eABCe63977F90d2564C9B223567A41B48AdE',
-    bridge: '0xC5564e2A9D3b1A3d1400bAa4951F571af0b265E2',
+    token: '0x5a746ee9933627ed79822d35a3fe812eddd5ba37',
+    bridge: '0xFfa85Db47ba6118B51ce9c65A9cc213060290b62',
   },
   bsc: {
     chainId: 56,
     rpc: process.env.BSC_RPC_URL || 'https://rpc1.eagleswap.llc/bsc/',
-    token: '0x390ad250461a2a8e62264299C132171E0e180fD1',
-    bridge: '0xF964264c4Bb47f4a36AB619ec16be0B139F897d0',
+    token: '0x480F12D2ECEFe1660e72149c57327f5E0646E5c4',
+    bridge: '0xAb13cbC259A592E6b09cf1Ddbdc85eAB7AB2586f',
   },
   solana: {
     chainId: 501, // Custom chain ID for Solana
@@ -33,11 +33,25 @@ const CONTRACTS = {
 const XLAYER_BRIDGE_ABI = [
   'event BridgeInitiated(address indexed from, address indexed to, uint256 amount, uint256 fee, uint256 indexed nonce, uint256 timestamp)',
   'function release(address to, uint256 amount, uint256 srcNonce, uint256 srcChainId, bytes calldata signature) external',
+  'function bridge(address to, uint256 amount) external',
+  'function nonce() external view returns (uint256)',
+  'function processedNonces(uint256) external view returns (bool)',
 ];
 
 const BSC_BRIDGE_ABI = [
   'event BridgeInitiated(address indexed from, address indexed to, uint256 amount, uint256 fee, uint256 indexed nonce, uint256 timestamp)',
   'function release(address to, uint256 amount, uint256 srcNonce, uint256 srcChainId, bytes calldata signature) external',
+  'function bridge(address to, uint256 amount) external',
+  'function nonce() external view returns (uint256)',
+  'function processedNonces(uint256) external view returns (bool)',
+];
+
+// Token ABIs (for bridgeIn/bridgeOut)
+const TOKEN_BRIDGE_ABI = [
+  'function bridgeIn(address to, uint256 amount) external',
+  'function bridgeOut(uint256 amount) external',
+  'function balanceOf(address) external view returns (uint256)',
+  'function approve(address spender, uint256 amount) external returns (bool)',
 ];
 
 interface BridgeRequest {
