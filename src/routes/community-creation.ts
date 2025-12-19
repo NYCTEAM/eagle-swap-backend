@@ -43,14 +43,43 @@ router.post('/create-request', async (req: Request, res: Response) => {
     const existingCode = db.prepare(`
       SELECT 1 FROM communities WHERE community_code = ?
       UNION
-      SELECT 1 FROM community_creation_requests WHERE community_code = ? AND status != 'rejected'
+      SELECT 1 FROM community_creation_requests WHERE community_code = ? AND status = 'pending'
     `).get(communityCode, communityCode);
 
     if (existingCode) {
       db.close();
       return res.status(400).json({
         success: false,
-        error: 'Community code already exists'
+        error: 'Community code already exists or has a pending request'
+      });
+    }
+
+    // 检查社区名称是否已存在
+    const existingName = db.prepare(`
+      SELECT 1 FROM communities WHERE community_name = ?
+      UNION
+      SELECT 1 FROM community_creation_requests WHERE community_name = ? AND status = 'pending'
+    `).get(communityName, communityName);
+
+    if (existingName) {
+      db.close();
+      return res.status(400).json({
+        success: false,
+        error: 'Community name already exists or has a pending request'
+      });
+    }
+
+    // 检查用户是否已有 pending 的申请
+    const existingPending = db.prepare(`
+      SELECT 1 FROM community_creation_requests 
+      WHERE LOWER(creator_address) = LOWER(?) AND status = 'pending'
+    `).get(creatorAddress);
+
+    if (existingPending) {
+      db.close();
+      return res.status(400).json({
+        success: false,
+        error: 'You already have a pending community creation request'
       });
     }
 
