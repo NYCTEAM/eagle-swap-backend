@@ -81,7 +81,7 @@ router.get('/stats/:address', async (req: Request, res: Response) => {
  */
 router.post('/claim-signature', async (req: Request, res: Response) => {
   try {
-    const { userAddress } = req.body;
+    const { userAddress, chainId } = req.body;
     
     if (!userAddress) {
       return res.status(400).json({
@@ -90,7 +90,9 @@ router.post('/claim-signature', async (req: Request, res: Response) => {
       });
     }
     
-    const result = await nftMiningService.generateClaimSignature(userAddress);
+    // 默认使用 X Layer (196)，也支持 BSC (56)
+    const targetChainId = chainId || 196;
+    const result = await nftMiningService.generateClaimSignature(userAddress, targetChainId);
     
     if (!result.success) {
       return res.status(400).json(result);
