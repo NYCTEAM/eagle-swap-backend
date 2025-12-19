@@ -478,12 +478,13 @@ class BridgeRelayerService extends EventEmitter {
       const wallet = this.relayerWallet.connect(this.bscProvider);
       const bridge = new ethers.Contract(CONTRACTS.bsc.bridge, BSC_BRIDGE_ABI, wallet);
 
-      // Create signature
+      // Create signature - 匹配合约的签名验证逻辑
+      // 合约会对 messageHash 调用 toEthSignedMessageHash，所以我们直接签名原始哈希
       const messageHash = ethers.solidityPackedKeccak256(
         ['address', 'uint256', 'uint256', 'uint256', 'uint256', 'address'],
         [request.to, request.amount, request.nonce, CONTRACTS.xlayer.chainId, CONTRACTS.bsc.chainId, CONTRACTS.bsc.bridge]
       );
-      const signature = await this.relayerWallet.signMessage(ethers.getBytes(messageHash));
+      const signature = await this.relayerWallet.signingKey.sign(messageHash).serialized;
 
       // Call release
       const tx = await bridge.release(
@@ -527,12 +528,13 @@ class BridgeRelayerService extends EventEmitter {
       const wallet = this.relayerWallet.connect(this.xlayerProvider);
       const bridge = new ethers.Contract(CONTRACTS.xlayer.bridge, XLAYER_BRIDGE_ABI, wallet);
 
-      // Create signature
+      // Create signature - 匹配合约的签名验证逻辑
+      // 合约会对 messageHash 调用 toEthSignedMessageHash，所以我们直接签名原始哈希
       const messageHash = ethers.solidityPackedKeccak256(
         ['address', 'uint256', 'uint256', 'uint256', 'uint256', 'address'],
         [request.to, request.amount, CONTRACTS.bsc.chainId, request.nonce, CONTRACTS.xlayer.chainId, CONTRACTS.xlayer.bridge]
       );
-      const signature = await this.relayerWallet.signMessage(ethers.getBytes(messageHash));
+      const signature = await this.relayerWallet.signingKey.sign(messageHash).serialized;
 
       // Call bridgeIn
       const tx = await bridge.bridgeIn(
