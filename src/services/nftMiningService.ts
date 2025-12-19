@@ -20,10 +20,16 @@ import { db } from '../database';
 // 项目启动时间（用于计算当前年份）
 const PROJECT_START_DATE = new Date('2025-01-01');
 
+// 多链合约地址配置
+const CONTRACT_ADDRESSES: Record<number, string> = {
+  196: '0xf3EB7739B8a756a79D84335DC7f8AF10B5906Ab5',  // X Layer
+  56: '0x19086529b5824742E182A17073F2F7648392B237',   // BSC
+};
+
 export class NFTMiningService {
   private signerWallet: ethers.Wallet;
-  private contractAddress: string;
-  private chainId: number;
+  private contractAddresses: Record<number, string>;
+  private defaultChainId: number;
   
   constructor() {
     const privateKey = process.env.NFT_MINING_SIGNER_KEY;
@@ -33,16 +39,24 @@ export class NFTMiningService {
         this.signerWallet = new ethers.Wallet(privateKey);
         console.log(`🔐 NFT Mining Signer: ${this.signerWallet.address}`);
       } catch (e) {
-        console.warn('⚠️ NFT_MINING_SIGNER_KEY 无效，签名功能将不可用');
+        console.warn('⚠️ NFT_MINING_SIGNER_KEY invalid, signing disabled');
         this.signerWallet = null as any;
       }
     } else {
-      console.warn('⚠️ NFT_MINING_SIGNER_KEY 未设置，签名功能将不可用');
+      console.warn('⚠️ NFT_MINING_SIGNER_KEY not set, signing disabled');
       this.signerWallet = null as any;
     }
     
-    this.contractAddress = process.env.NFT_MINING_CONTRACT_ADDRESS || '';
-    this.chainId = parseInt(process.env.CHAIN_ID || '196'); // X Layer mainnet
+    this.contractAddresses = CONTRACT_ADDRESSES;
+    this.defaultChainId = parseInt(process.env.CHAIN_ID || '196');
+    
+    console.log('📋 NFT Mining Contracts:');
+    console.log(`   X Layer (196): ${this.contractAddresses[196]}`);
+    console.log(`   BSC (56): ${this.contractAddresses[56]}`);
+  }
+  
+  getContractAddress(chainId: number): string {
+    return this.contractAddresses[chainId] || this.contractAddresses[this.defaultChainId];
   }
   
   /**
@@ -232,8 +246,10 @@ export class NFTMiningService {
   
   /**
    * 生成领取奖励的签名
+   * @param userAddress 用户地址
+   * @param chainId 链ID (196=X Layer, 56=BSC)
    */
-  async generateClaimSignature(userAddress: string): Promise<{
+  async generateClaimSignature(userAddress: string, chainId: number = 196): Promise<{
     success: boolean;
     data?: {
       amount: string;
@@ -242,6 +258,8 @@ export class NFTMiningService {
       baseReward: string;
       communityBonus: string;
       signature: string;
+      contractAddress: string;
+      chainId: number;
       breakdown: any;
     };
     error?: string;
@@ -276,6 +294,9 @@ export class NFTMiningService {
       const baseRewardWei = ethers.parseEther(reward.baseReward.toFixed(18));
       const communityBonusWei = ethers.parseEther(reward.communityBonus.toFixed(18));
       
+      // 获取对应链的合约地址
+      const contractAddress = this.getContractAddress(chainId);
+      
       // 构造消息哈希（简化版，只包含必要参数）
       const messageHash = ethers.solidityPackedKeccak256(
         ['address', 'uint256', 'uint256', 'uint256', 'address', 'uint256'],
@@ -284,8 +305,8 @@ export class NFTMiningService {
           amountWei,
           nonce,
           deadline,
-          this.contractAddress,
-          this.chainId
+          contractAddress,
+          chainId
         ]
       );
       
@@ -320,6 +341,8 @@ export class NFTMiningService {
           baseReward: baseRewardWei.toString(),
           communityBonus: communityBonusWei.toString(),
           signature,
+          contractAddress,
+          chainId,
           breakdown: reward.breakdown
         }
       };
