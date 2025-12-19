@@ -840,12 +840,112 @@ class BridgeRelayerService extends EventEmitter {
     }));
   }
 
-  // Manual trigger (for API endpoint)
+  // Manual trigger (for API endpoint) - 手动处理跨链交易
   async notifyBridge(txHash: string, fromChain: 'xlayer' | 'bsc') {
     console.log(`📬 Manual bridge notification: ${txHash} from ${fromChain}`);
-    // The event listener will pick this up automatically
-    // This is just for logging/tracking purposes
-    return { received: true, txHash };
+    
+    try {
+      // 检查是否已存在
+      const existing = this.db.prepare('SELECT tx_hash FROM bridge_transactions WHERE tx_hash = ?').get(txHash);
+      if (existing) {
+        console.log(`   Transaction already exists in database`);
+        return { received: true, txHash, status: 'already_exists' };
+      }
+      
+      // 获取交易收据
+      const provider = fromChain === 'xlayer' ? this.xlayerProvider : this.bscProvider;
+      const receipt = await provider.getTransactionReceipt(txHash);
+      
+      if (!receipt) {
+        console.log(`   Transaction not found on ${fromChain}`);
+        return { received: true, txHash, status: 'not_found' };
+      }
+      
+      console.log(`   Found transaction, processing logs...`);
+      
+      // 解析事件
+      const bridgeAddress = fromChain === 'xlayer' ? CONTRACTS.xlayer.bridge : CONTRACTS.bsc.bridge;
+      const bridgeAbi = fromChain === 'xlayer' ? XLAYER_BRIDGE_ABI : BSC_BRIDGE_ABI;
+      const bridge = new ethers.Contract(bridgeAddress, bridgeAbi, provider);
+      
+      for (const log of receipt.logs) {
+        if (log.address.toLowerCase() !== bridgeAddress.toLowerCase()) continue;
+        
+        try {
+          const parsed = bridge.interface.parseLog({ topics: log.topics as string[], data: log.data });
+          if (!parsed) continue;
+          
+          console.log(`   Found event: ${parsed.name}`);
+          
+          if (fromChain === 'xlayer' && parsed.name === 'BridgeOut') {
+            const [from, to, amount, fee, destChainId, nonce] = parsed.args;
+            const destChainNum = Number(destChainId);
+            const toChain = destChainNum === CONTRACTS.bsc.chainId ? 'bsc' : 
+                            destChainNum === CONTRACTS.solana.chainId ? 'solana' : 'bsc';
+            
+            const request: BridgeRequest = {
+              txHash,
+              fromChain: 'xlayer',
+              toChain: toChain as any,
+              from,
+              to,
+              amount: amount.toString(),
+              fee: fee?.toString() || '0',
+              nonce: Number(nonce),
+              status: 'pending',
+              createdAt: new Date(),
+            };
+            
+            this.pendingRequests.set(txHash, request);
+            this.saveToDb(request, ethers.formatEther(fee || 0));
+            
+            console.log(`   Processing X Layer -> ${toChain} bridge...`);
+            
+            if (destChainNum === CONTRACTS.bsc.chainId) {
+              await this.releaseToBSC(request);
+            } else if (destChainNum === CONTRACTS.solana.chainId) {
+              await this.mintToSolana(request);
+            }
+            
+            return { received: true, txHash, status: 'processing', toChain };
+          }
+          
+          if (fromChain === 'bsc' && parsed.name === 'BridgeInitiated') {
+            const [from, to, amount, fee, nonce] = parsed.args;
+            
+            const request: BridgeRequest = {
+              txHash,
+              fromChain: 'bsc',
+              toChain: 'xlayer',
+              from,
+              to,
+              amount: amount.toString(),
+              fee: fee?.toString() || '0',
+              nonce: Number(nonce),
+              status: 'pending',
+              createdAt: new Date(),
+            };
+            
+            this.pendingRequests.set(txHash, request);
+            this.saveToDb(request, ethers.formatEther(fee || 0));
+            
+            console.log(`   Processing BSC -> X Layer bridge...`);
+            await this.releaseToXLayer(request);
+            
+            return { received: true, txHash, status: 'processing', toChain: 'xlayer' };
+          }
+        } catch (e) {
+          // Not a bridge event, skip
+        }
+      }
+      
+      console.log(`   No bridge event found in transaction`);
+      return { received: true, txHash, status: 'no_bridge_event' };
+      
+    } catch (error: any) {
+      console.error(`   Error processing notification:`, error.message);
+      return { received: true, txHash, status: 'error', error: error.message };
+    }
   }
 }
 
