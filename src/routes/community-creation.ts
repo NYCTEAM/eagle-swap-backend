@@ -54,27 +54,26 @@ router.post('/create-request', async (req: Request, res: Response) => {
       });
     }
 
-    // 如果是 NFT 持有者创建，检查是否持有顶级 NFT
+    // 如果是 NFT 持有者创建，检查是否持有顶级 NFT (Level 6 Platinum 或 Level 7 Diamond)
     if (creationType === 'nft_holder') {
       const hasPremiumNFT = db.prepare(`
-        SELECT 1 FROM nodes n
-        JOIN nft_tier_privileges ntp ON n.level = ntp.tier_id
-        WHERE n.owner_address = ? AND ntp.can_create_community = 1
+        SELECT 1 FROM nft_holders 
+        WHERE LOWER(owner_address) = LOWER(?) AND level >= 6
       `).get(creatorAddress);
 
       if (!hasPremiumNFT) {
         db.close();
         return res.status(400).json({
           success: false,
-          error: 'You need to hold a Platinum or Diamond Node to create a community directly'
+          error: 'You need to hold a Platinum (Level 6) or Diamond (Level 7) NFT to create a community directly'
         });
       }
     }
 
-    // 如果是投票创建，检查是否持有 NFT
+    // 如果是投票创建，检查是否持有任何 NFT
     if (creationType === 'voting') {
       const hasNFT = db.prepare(`
-        SELECT 1 FROM nodes WHERE owner_address = ?
+        SELECT 1 FROM nft_holders WHERE LOWER(owner_address) = LOWER(?)
       `).get(creatorAddress);
 
       if (!hasNFT) {
@@ -143,13 +142,13 @@ router.post('/vote', async (req: Request, res: Response) => {
       });
     }
 
-    // 检查用户是否持有 NFT
+    // 检查用户是否持有 NFT，并获取投票权重
     const userNFT = db.prepare(`
-      SELECT n.level, ntp.vote_weight
-      FROM nodes n
-      JOIN nft_tier_privileges ntp ON n.level = ntp.tier_id
-      WHERE n.owner_address = ?
-      ORDER BY ntp.vote_weight DESC
+      SELECT nh.level, COALESCE(ntp.vote_weight, nh.level) as vote_weight
+      FROM nft_holders nh
+      LEFT JOIN nft_tier_privileges ntp ON nh.level = ntp.tier_id
+      WHERE LOWER(nh.owner_address) = LOWER(?)
+      ORDER BY nh.level DESC
       LIMIT 1
     `).get(voterAddress) as { level: number; vote_weight: number } | undefined;
 
@@ -301,10 +300,10 @@ router.get('/request/:id', async (req: Request, res: Response) => {
         ccv.voter_address,
         ccv.vote_weight,
         ccv.voted_at,
-        nl.name as nft_name
+        nls.level_name as nft_name
       FROM community_creation_votes ccv
-      LEFT JOIN nodes n ON ccv.voter_address = n.owner_address
-      LEFT JOIN node_levels nl ON n.level = nl.id
+      LEFT JOIN nft_holders nh ON LOWER(ccv.voter_address) = LOWER(nh.owner_address)
+      LEFT JOIN nft_level_stats nls ON nh.level = nls.level
       WHERE ccv.request_id = ?
       ORDER BY ccv.voted_at DESC
     `).all(id);
@@ -355,16 +354,15 @@ router.get('/can-create/:address', async (req: Request, res: Response) => {
       });
     }
 
-    // 检查是否持有顶级 NFT
+    // 检查是否持有顶级 NFT (Level 6 Platinum 或 Level 7 Diamond)
     const hasPremiumNFT = db.prepare(`
-      SELECT 1 FROM nodes n
-      JOIN nft_tier_privileges ntp ON n.level = ntp.tier_id
-      WHERE n.owner_address = ? AND ntp.can_create_community = 1
+      SELECT 1 FROM nft_holders 
+      WHERE LOWER(owner_address) = LOWER(?) AND level >= 6
     `).get(address);
 
     // 检查是否持有任何 NFT
     const hasAnyNFT = db.prepare(`
-      SELECT 1 FROM nodes WHERE owner_address = ?
+      SELECT 1 FROM nft_holders WHERE LOWER(owner_address) = LOWER(?)
     `).get(address);
 
     db.close();
