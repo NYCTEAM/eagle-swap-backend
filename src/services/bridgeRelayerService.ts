@@ -11,14 +11,14 @@ const CONTRACTS = {
   xlayer: {
     chainId: 196,
     rpc: process.env.XLAYER_RPC_URL || 'https://rpc1.eagleswap.llc/xlayer/',
-    token: '0xdd9B82048D2408D69374Aecb6Cf65e66754c95bc',
-    bridge: '0xC8ae328157941C5e8ce47756C71B97a93232Da3b', // V2 with Solana support
+    token: '0x9fF9eABCe63977F90d2564C9B223567A41B48AdE',
+    bridge: '0xC5564e2A9D3b1A3d1400bAa4951F571af0b265E2',
   },
   bsc: {
     chainId: 56,
     rpc: process.env.BSC_RPC_URL || 'https://rpc1.eagleswap.llc/bsc/',
-    token: '0x83Fe5B70a08d42F6224A9644b3c73692f2d9092a',
-    bridge: '0x0985DB9C2FA117152941521991E06AAfA03c82F3',
+    token: '0x390ad250461a2a8e62264299C132171E0e180fD1',
+    bridge: '0xF964264c4Bb47f4a36AB619ec16be0B139F897d0',
   },
   solana: {
     chainId: 501, // Custom chain ID for Solana
