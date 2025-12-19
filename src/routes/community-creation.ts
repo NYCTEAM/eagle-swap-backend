@@ -221,8 +221,46 @@ router.post('/vote', async (req: Request, res: Response) => {
       VALUES (?, ?, ?)
     `).run(requestId, voterAddress, userNFT.vote_weight);
 
+    // 更新申请的当前票数
+    db.prepare(`
+      UPDATE community_creation_requests 
+      SET current_votes = (
+        SELECT COALESCE(SUM(vote_weight), 0) FROM community_creation_votes WHERE request_id = ?
+      )
+      WHERE id = ?
+    `).run(requestId, requestId);
+
+    // 检查是否达到所需票数，如果达到则自动创建社区
+    const updatedReq = db.prepare(`
+      SELECT * FROM community_creation_requests WHERE id = ?
+    `).get(requestId) as any;
+
+    if (updatedReq && updatedReq.current_votes >= updatedReq.required_votes) {
+      // 更新申请状态为 approved
+      db.prepare(`
+        UPDATE community_creation_requests 
+        SET status = 'approved', approved_at = datetime('now'), completed_at = datetime('now')
+        WHERE id = ?
+      `).run(requestId);
+
+      // 创建社区
+      const communityResult = db.prepare(`
+        INSERT INTO communities (
+          community_name, community_code, leader_address, total_members, community_level, total_node_value, status
+        ) VALUES (?, ?, ?, 1, 1, 0, 'active')
+      `).run(updatedReq.community_name, updatedReq.community_code, updatedReq.creator_address);
+
+      // 将创建者加入社区作为社区长
+      db.prepare(`
+        INSERT INTO community_members (community_id, member_address, is_leader, joined_at)
+        VALUES (?, ?, 1, datetime('now'))
+      `).run(communityResult.lastInsertRowid, updatedReq.creator_address);
+
+      console.log(`✅ 社区 "${updatedReq.community_name}" 投票通过，已自动创建`);
+    }
+
     // 获取更新后的申请详情
-    const updatedRequest = db.prepare(`
+    const finalRequest = db.prepare(`
       SELECT * FROM community_creation_requests_view WHERE id = ?
     `).get(requestId);
 
@@ -230,7 +268,10 @@ router.post('/vote', async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      data: updatedRequest
+      data: finalRequest,
+      message: updatedReq && updatedReq.current_votes >= updatedReq.required_votes 
+        ? 'Vote successful! Community has been created!' 
+        : 'Vote successful!'
     });
   } catch (error: any) {
     db.close();
