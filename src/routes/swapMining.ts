@@ -165,12 +165,14 @@ router.get('/pending/:address', (req, res) => {
 });
 
 /**
- * 生成领取签名
+ * 生成领取签名 (支持多链)
  * POST /api/swap-mining/sign-claim
+ * Body: { userAddress, chainId? }
+ * chainId: 196 (X Layer) 或 56 (BSC)
  */
 router.post('/sign-claim', async (req, res) => {
   try {
-    const { userAddress } = req.body;
+    const { userAddress, chainId } = req.body;
     
     if (!userAddress) {
       return res.status(400).json({
@@ -179,7 +181,9 @@ router.post('/sign-claim', async (req, res) => {
       });
     }
     
-    const result = await swapMiningService.generateClaimSignature(userAddress);
+    // 默认使用 X Layer (196)，也支持 BSC (56)
+    const targetChainId = chainId || 196;
+    const result = await swapMiningService.generateClaimSignature(userAddress, targetChainId);
     res.json(result);
   } catch (error: any) {
     console.error('生成签名失败:', error);
@@ -191,12 +195,13 @@ router.post('/sign-claim', async (req, res) => {
 });
 
 /**
- * 标记奖励已领取
+ * 标记奖励已领取 (支持多链)
  * POST /api/swap-mining/mark-claimed
+ * Body: { userAddress, amount, chainId? }
  */
 router.post('/mark-claimed', async (req, res) => {
   try {
-    const { userAddress, amount } = req.body;
+    const { userAddress, amount, chainId } = req.body;
     
     if (!userAddress || !amount) {
       return res.status(400).json({
@@ -205,7 +210,11 @@ router.post('/mark-claimed', async (req, res) => {
       });
     }
     
-    const result = await swapMiningService.markRewardsClaimed(userAddress, parseFloat(amount));
+    const result = await swapMiningService.markRewardsClaimed(
+      userAddress, 
+      parseFloat(amount),
+      chainId || 196
+    );
     res.json(result);
   } catch (error: any) {
     console.error('标记领取失败:', error);

@@ -1,6 +1,12 @@
 import { db } from '../database';
 import { ethers } from 'ethers';
 
+// 多链合约地址配置
+const SWAP_MINING_CONTRACTS: Record<number, string> = {
+  196: process.env.SWAP_MINING_XLAYER_ADDRESS || process.env.SWAP_MINING_REWARDS_ADDRESS || '',  // X Layer
+  56: process.env.SWAP_MINING_BSC_ADDRESS || '',   // BSC
+};
+
 /**
  * SWAP 交易挖矿服务
  */
@@ -588,13 +594,29 @@ export class SwapMiningService {
   }
   
   /**
-   * 生成领取奖励的签名 (新版本 - 与链上合约配合)
+   * 生成领取奖励的签名 (支持多链)
+   * @param userAddress 用户地址
+   * @param chainId 目标链 ID (196=X Layer, 56=BSC)
    */
-  async generateClaimSignature(userAddress: string) {
+  async generateClaimSignature(userAddress: string, chainId: number = 196) {
     try {
-      console.log(`🔐 生成领取签名: ${userAddress}`);
+      console.log(`🔐 生成领取签名: ${userAddress} (Chain: ${chainId})`);
       
-      // 1. 计算用户待领取奖励
+      // 1. 检查用户是否已经在其他链领取过 (防止跨链重复领取)
+      const claimRecord = db.prepare(`
+        SELECT claimed_chain_id, total_claimed 
+        FROM user_swap_stats 
+        WHERE user_address = ?
+      `).get(userAddress.toLowerCase()) as any;
+      
+      if (claimRecord && claimRecord.claimed_chain_id && claimRecord.claimed_chain_id !== chainId) {
+        return {
+          success: false,
+          error: `您已在 ${claimRecord.claimed_chain_id === 196 ? 'X Layer' : 'BSC'} 链领取过奖励，无法切换到其他链领取`
+        };
+      }
+      
+      // 2. 计算用户待领取奖励
       const pendingRewards = this.calculatePendingRewards(userAddress);
       
       if (pendingRewards <= 0) {
@@ -604,27 +626,28 @@ export class SwapMiningService {
         };
       }
       
-      // 2. 获取签名配置 (无最小提取限制，用户支付 Gas)
+      // 3. 获取签名配置
       const signerPrivateKey = process.env.SIGNER_PRIVATE_KEY;
-      const contractAddress = process.env.SWAP_MINING_REWARDS_ADDRESS;
-      const chainId = parseInt(process.env.XLAYER_CHAIN_ID || '196');
+      const contractAddress = SWAP_MINING_CONTRACTS[chainId];
       
-      if (!signerPrivateKey || !contractAddress) {
-        throw new Error('Missing signer configuration');
+      if (!signerPrivateKey) {
+        throw new Error('Missing signer private key');
       }
       
-      // 4. 获取用户 nonce (从合约或数据库)
+      if (!contractAddress) {
+        throw new Error(`No contract address configured for chain ${chainId}`);
+      }
+      
+      // 4. 获取用户 nonce (从数据库)
       const userNonce = await this.getUserNonce(userAddress);
       
       // 5. 设置签名过期时间
       const expiryMinutes = parseInt(process.env.SIGNATURE_EXPIRY_MINUTES || '30');
       const deadline = Math.floor(Date.now() / 1000) + (expiryMinutes * 60);
       
-      // 6. 生成签名消息 (Match updated SwapMining.sol contract)
-      // Contract: keccak256(abi.encode(user, amount, nonce, deadline))
+      // 6. 生成签名消息
       const amountBN = ethers.parseEther(pendingRewards.toString());
       
-      // Use solidityPacked for abi.encode equivalent
       const messageHash = ethers.keccak256(
         ethers.AbiCoder.defaultAbiCoder().encode(
           ['address', 'uint256', 'uint256', 'uint256'],
@@ -634,21 +657,21 @@ export class SwapMiningService {
       
       // 7. 签名
       const wallet = new ethers.Wallet(signerPrivateKey);
-      // ethers.wallet.signMessage automatically adds the "\x19Ethereum Signed Message:\n32" prefix
       const signature = await wallet.signMessage(ethers.getBytes(messageHash));
       
-      console.log(`✅ 签名生成成功: ${pendingRewards} EAGLE (deadline: ${new Date(deadline * 1000).toISOString()})`);
+      console.log(`✅ 签名生成成功: ${pendingRewards} EAGLE on Chain ${chainId}`);
       
       return {
         success: true,
         data: {
           userAddress,
-          amount: amountBN.toString(), // wei format for contract
+          amount: amountBN.toString(),
           amountFormatted: pendingRewards, 
           nonce: userNonce,
           deadline,
           signature,
-          contractAddress
+          contractAddress,
+          chainId
         }
       };
       
@@ -717,18 +740,22 @@ export class SwapMiningService {
   
   /**
    * 标记奖励已领取 (在用户成功调用合约后调用)
+   * @param userAddress 用户地址
+   * @param amount 领取数量
+   * @param chainId 领取的链 ID (用于锁定，防止跨链重复领取)
    */
-  async markRewardsClaimed(userAddress: string, amount: number) {
+  async markRewardsClaimed(userAddress: string, amount: number, chainId?: number) {
     try {
-      // 更新已领取统计
+      // 更新已领取统计，同时记录领取的链 ID
       db.prepare(`
         INSERT INTO user_swap_stats 
-        (user_address, total_eagle_claimed, updated_at)
-        VALUES (?, ?, datetime('now'))
+        (user_address, total_eagle_claimed, claimed_chain_id, updated_at)
+        VALUES (?, ?, ?, datetime('now'))
         ON CONFLICT(user_address) DO UPDATE SET
           total_eagle_claimed = total_eagle_claimed + ?,
+          claimed_chain_id = COALESCE(claimed_chain_id, ?),
           updated_at = datetime('now')
-      `).run(userAddress.toLowerCase(), amount, amount);
+      `).run(userAddress.toLowerCase(), amount, chainId || 196, amount, chainId || 196);
       
       // 增加 nonce
       db.prepare(`
@@ -737,7 +764,7 @@ export class SwapMiningService {
         WHERE user_address = ?
       `).run(userAddress.toLowerCase());
       
-      console.log(`✅ 标记已领取: ${userAddress} → ${amount} EAGLE`);
+      console.log(`✅ 标记已领取: ${userAddress} → ${amount} EAGLE (Chain: ${chainId || 196})`);
       
       return { success: true };
     } catch (error) {
