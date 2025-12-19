@@ -96,22 +96,113 @@ router.get('/list', async (req, res) => {
 router.get('/leaderboard', async (req, res) => {
   try {
     const { limit } = req.query;
+    const Database = require('better-sqlite3');
+    const path = require('path');
+    const dbPath = process.env.DATABASE_PATH || path.join(__dirname, '../../data/eagleswap.db');
+    const db = new Database(dbPath);
     
-    // Return empty leaderboard for now (community system not fully implemented)
+    const communities = db.prepare(`
+      SELECT 
+        c.id,
+        c.community_name,
+        c.community_code,
+        c.leader_address,
+        c.total_members,
+        c.community_level,
+        c.total_node_value as total_value,
+        c.status,
+        COALESCE(clc.level_name, 'Bronze') as level_name,
+        COALESCE(clc.member_bonus_rate, 5) as bonus_rate
+      FROM communities c
+      LEFT JOIN community_level_config clc ON c.community_level = clc.level
+      WHERE c.status = 'active'
+      ORDER BY c.total_node_value DESC, c.total_members DESC
+      LIMIT ?
+    `).all(limit ? parseInt(limit as string) : 10);
+    
+    db.close();
+    
     res.json({
       success: true,
-      data: {
-        communities: [],
-        total: 0,
-        limit: limit ? parseInt(limit as string) : 10,
-        offset: 0
-      }
+      data: communities
     });
   } catch (error: any) {
     console.error('Error fetching community leaderboard:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to fetch community leaderboard',
+    });
+  }
+});
+
+/**
+ * GET /api/community/:id/members
+ * 获取社区成员列表（包含 NFT 信息）
+ */
+router.get('/:id/members', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const Database = require('better-sqlite3');
+    const path = require('path');
+    const dbPath = process.env.DATABASE_PATH || path.join(__dirname, '../../data/eagleswap.db');
+    const db = new Database(dbPath);
+    
+    // 获取社区成员及其 NFT 信息
+    const members = db.prepare(`
+      SELECT 
+        cm.member_address,
+        cm.is_leader,
+        cm.joined_at,
+        cm.node_value,
+        COUNT(nh.token_id) as nft_count,
+        MAX(nh.level) as highest_nft_level,
+        COALESCE(
+          (SELECT nls.level_name FROM nft_level_stats nls WHERE nls.level = MAX(nh.level)),
+          'None'
+        ) as highest_nft_name,
+        COALESCE(SUM(nls.weight), 0) as total_nft_weight
+      FROM community_members cm
+      LEFT JOIN nft_holders nh ON LOWER(cm.member_address) = LOWER(nh.owner_address)
+      LEFT JOIN nft_level_stats nls ON nh.level = nls.level
+      WHERE cm.community_id = ?
+      GROUP BY cm.member_address
+      ORDER BY cm.is_leader DESC, total_nft_weight DESC, cm.joined_at ASC
+    `).all(id);
+    
+    // 获取社区信息
+    const community = db.prepare(`
+      SELECT 
+        c.*,
+        COALESCE(clc.level_name, 'Bronze') as level_name,
+        COALESCE(clc.member_bonus_rate, 5) as member_bonus_rate,
+        COALESCE(clc.leader_bonus_rate, 10) as leader_bonus_rate
+      FROM communities c
+      LEFT JOIN community_level_config clc ON c.community_level = clc.level
+      WHERE c.id = ?
+    `).get(id);
+    
+    db.close();
+    
+    if (!community) {
+      return res.status(404).json({
+        success: false,
+        error: 'Community not found'
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        community,
+        members,
+        total_members: members.length
+      }
+    });
+  } catch (error: any) {
+    console.error('Error fetching community members:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch community members',
     });
   }
 });
