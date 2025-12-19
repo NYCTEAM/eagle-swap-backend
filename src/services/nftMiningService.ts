@@ -26,12 +26,23 @@ export class NFTMiningService {
   private chainId: number;
   
   constructor() {
-    const privateKey = process.env.NFT_MINING_SIGNER_KEY || '';
-    this.signerWallet = new ethers.Wallet(privateKey);
+    const privateKey = process.env.NFT_MINING_SIGNER_KEY;
+    
+    if (privateKey) {
+      try {
+        this.signerWallet = new ethers.Wallet(privateKey);
+        console.log(`🔐 NFT Mining Signer: ${this.signerWallet.address}`);
+      } catch (e) {
+        console.warn('⚠️ NFT_MINING_SIGNER_KEY 无效，签名功能将不可用');
+        this.signerWallet = null as any;
+      }
+    } else {
+      console.warn('⚠️ NFT_MINING_SIGNER_KEY 未设置，签名功能将不可用');
+      this.signerWallet = null as any;
+    }
+    
     this.contractAddress = process.env.NFT_MINING_CONTRACT_ADDRESS || '';
     this.chainId = parseInt(process.env.CHAIN_ID || '196'); // X Layer mainnet
-    
-    console.log(`🔐 NFT Mining Signer: ${this.signerWallet.address}`);
   }
   
   /**
@@ -236,6 +247,14 @@ export class NFTMiningService {
     error?: string;
   }> {
     try {
+      // 检查签名者是否可用
+      if (!this.signerWallet) {
+        return {
+          success: false,
+          error: '签名服务未配置，请联系管理员'
+        };
+      }
+      
       // 计算奖励
       const reward = await this.calculatePendingReward(userAddress);
       
