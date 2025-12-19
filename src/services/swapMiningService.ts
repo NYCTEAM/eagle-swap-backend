@@ -597,26 +597,14 @@ export class SwapMiningService {
    * 生成领取奖励的签名 (支持多链)
    * @param userAddress 用户地址
    * @param chainId 目标链 ID (196=X Layer, 56=BSC)
+   * 
+   * 用户每次领取后奖励清零，下次有新奖励时可以自由选择任意链领取
    */
   async generateClaimSignature(userAddress: string, chainId: number = 196) {
     try {
       console.log(`🔐 生成领取签名: ${userAddress} (Chain: ${chainId})`);
       
-      // 1. 检查用户是否已经在其他链领取过 (防止跨链重复领取)
-      const claimRecord = db.prepare(`
-        SELECT claimed_chain_id, total_claimed 
-        FROM user_swap_stats 
-        WHERE user_address = ?
-      `).get(userAddress.toLowerCase()) as any;
-      
-      if (claimRecord && claimRecord.claimed_chain_id && claimRecord.claimed_chain_id !== chainId) {
-        return {
-          success: false,
-          error: `您已在 ${claimRecord.claimed_chain_id === 196 ? 'X Layer' : 'BSC'} 链领取过奖励，无法切换到其他链领取`
-        };
-      }
-      
-      // 2. 计算用户待领取奖励
+      // 1. 计算用户待领取奖励
       const pendingRewards = this.calculatePendingRewards(userAddress);
       
       if (pendingRewards <= 0) {
@@ -626,7 +614,7 @@ export class SwapMiningService {
         };
       }
       
-      // 3. 获取签名配置
+      // 2. 获取签名配置
       const signerPrivateKey = process.env.SIGNER_PRIVATE_KEY;
       const contractAddress = SWAP_MINING_CONTRACTS[chainId];
       
@@ -742,20 +730,19 @@ export class SwapMiningService {
    * 标记奖励已领取 (在用户成功调用合约后调用)
    * @param userAddress 用户地址
    * @param amount 领取数量
-   * @param chainId 领取的链 ID (用于锁定，防止跨链重复领取)
+   * @param chainId 领取的链 ID (仅用于日志记录)
    */
   async markRewardsClaimed(userAddress: string, amount: number, chainId?: number) {
     try {
-      // 更新已领取统计，同时记录领取的链 ID
+      // 更新已领取统计
       db.prepare(`
         INSERT INTO user_swap_stats 
-        (user_address, total_eagle_claimed, claimed_chain_id, updated_at)
-        VALUES (?, ?, ?, datetime('now'))
+        (user_address, total_eagle_claimed, updated_at)
+        VALUES (?, ?, datetime('now'))
         ON CONFLICT(user_address) DO UPDATE SET
           total_eagle_claimed = total_eagle_claimed + ?,
-          claimed_chain_id = COALESCE(claimed_chain_id, ?),
           updated_at = datetime('now')
-      `).run(userAddress.toLowerCase(), amount, chainId || 196, amount, chainId || 196);
+      `).run(userAddress.toLowerCase(), amount, amount);
       
       // 增加 nonce
       db.prepare(`
