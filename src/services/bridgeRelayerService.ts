@@ -31,9 +31,8 @@ const CONTRACTS = {
 
 // Bridge ABIs
 const XLAYER_BRIDGE_ABI = [
-  'event BridgeOut(address indexed from, address indexed to, uint256 amount, uint256 fee, uint256 indexed destChainId, uint256 nonce, uint256 timestamp)',
-  'event BridgeOutSolana(address indexed from, bytes32 indexed solanaAddress, uint256 amount, uint256 fee, uint256 nonce, uint256 timestamp)',
-  'function bridgeIn(address to, uint256 amount, uint256 srcChainId, uint256 srcNonce, bytes calldata signature) external',
+  'event BridgeInitiated(address indexed from, address indexed to, uint256 amount, uint256 fee, uint256 indexed nonce, uint256 timestamp)',
+  'function release(address to, uint256 amount, uint256 srcNonce, uint256 srcChainId, bytes calldata signature) external',
 ];
 
 const BSC_BRIDGE_ABI = [
@@ -280,20 +279,12 @@ class BridgeRelayerService extends EventEmitter {
         const end = Math.min(start + BATCH_SIZE - 1, currentBlock);
         
         try {
-          // 根据链类型选择事件
-          if (chain === 'xlayer') {
-            const events = await bridge.queryFilter('BridgeOut', start, end);
-            for (const event of events) {
+          // 根据链类型选择事件 - 两条链都使用 BridgeInitiated
+          const events = await bridge.queryFilter('BridgeInitiated', start, end);
+          for (const event of events) {
+            if (chain === 'xlayer') {
               await this.processXLayerEvent(event);
-            }
-            
-            const solanaEvents = await bridge.queryFilter('BridgeOutSolana', start, end);
-            for (const event of solanaEvents) {
-              await this.processXLayerSolanaEvent(event);
-            }
-          } else if (chain === 'bsc') {
-            const events = await bridge.queryFilter('BridgeInitiated', start, end);
-            for (const event of events) {
+            } else if (chain === 'bsc') {
               await this.processBSCEvent(event);
             }
           }
@@ -311,24 +302,21 @@ class BridgeRelayerService extends EventEmitter {
     }
   }
   
-  // 处理 X Layer BridgeOut 事件
+  // 处理 X Layer BridgeInitiated 事件
   private async processXLayerEvent(event: any) {
     try {
-      const [from, to, amount, fee, destChainId, nonce] = event.args;
+      const [from, to, amount, fee, nonce] = event.args;
       const txHash = event.transactionHash;
       
       // 检查是否已存在
       const existing = this.db.prepare('SELECT tx_hash FROM bridge_transactions WHERE tx_hash = ?').get(txHash);
       if (existing) return;
       
-      const destChainNum = Number(destChainId);
-      const toChain = destChainNum === CONTRACTS.bsc.chainId ? 'bsc' : 
-                      destChainNum === CONTRACTS.solana.chainId ? 'solana' : 'bsc';
-      
+      // X Layer Bridge 只能桥接到 BSC
       const request: BridgeRequest = {
         txHash,
         fromChain: 'xlayer',
-        toChain: toChain as any,
+        toChain: 'bsc',
         from,
         to,
         amount: amount.toString(),
@@ -342,47 +330,10 @@ class BridgeRelayerService extends EventEmitter {
       this.saveToDb(request, fee?.toString() || '0');
       console.log(`   📥 Loaded historical X Layer event: ${txHash}`);
       
-      // 处理请求
-      await this.processRequest(request);
+      // 处理请求 - 释放到 BSC
+      await this.releaseToBSC(request);
     } catch (e) {
       console.error('Error processing X Layer event:', e);
-    }
-  }
-  
-  // 处理 X Layer BridgeOutSolana 事件
-  private async processXLayerSolanaEvent(event: any) {
-    try {
-      const [from, solanaAddress, amount, fee, nonce] = event.args;
-      const txHash = event.transactionHash;
-      
-      // 检查是否已存在
-      const existing = this.db.prepare('SELECT tx_hash FROM bridge_transactions WHERE tx_hash = ?').get(txHash);
-      if (existing) return;
-      
-      // 将 bytes32 转换为 Solana 地址
-      const solanaAddressStr = ethers.toUtf8String(solanaAddress).replace(/\0/g, '');
-      
-      const request: BridgeRequest = {
-        txHash,
-        fromChain: 'xlayer',
-        toChain: 'solana',
-        from,
-        to: solanaAddressStr,
-        amount: amount.toString(),
-        fee: fee?.toString() || '0',
-        nonce: Number(nonce),
-        status: 'pending',
-        createdAt: new Date(),
-      };
-      
-      this.pendingRequests.set(txHash, request);
-      this.saveToDb(request, fee?.toString() || '0');
-      console.log(`   📥 Loaded historical X Layer Solana event: ${txHash}`);
-      
-      // 处理请求
-      await this.processRequest(request);
-    } catch (e) {
-      console.error('Error processing X Layer Solana event:', e);
     }
   }
   
@@ -413,8 +364,8 @@ class BridgeRelayerService extends EventEmitter {
       this.saveToDb(request, fee?.toString() || '0');
       console.log(`   📥 Loaded historical BSC event: ${txHash}`);
       
-      // 处理请求
-      await this.processRequest(request);
+      // 处理请求 - 释放到 X Layer
+      await this.releaseToXLayer(request);
     } catch (e) {
       console.error('Error processing BSC event:', e);
     }
@@ -438,29 +389,20 @@ class BridgeRelayerService extends EventEmitter {
       this.xlayerProvider
     );
 
-    bridge.on('BridgeOut', async (from, to, amount, fee, destChainId, nonce, timestamp, event) => {
-      const destChainNum = Number(destChainId);
-      const destChainName = destChainNum === CONTRACTS.bsc.chainId ? 'BSC' : 
-                            destChainNum === CONTRACTS.solana.chainId ? 'Solana' : `Chain ${destChainNum}`;
-      
-      console.log(`\n📤 X Layer BridgeOut detected:`);
+    bridge.on('BridgeInitiated', async (from, to, amount, fee, nonce, timestamp, event) => {
+      console.log(`\n📤 X Layer BridgeInitiated detected:`);
       console.log(`   From: ${from}`);
       console.log(`   To: ${to}`);
       console.log(`   Amount: ${ethers.formatEther(amount)} EAGLE`);
-      console.log(`   Dest Chain: ${destChainName} (${destChainId})`);
       console.log(`   Nonce: ${nonce}`);
 
       const txHash = event.log.transactionHash;
       
-      // Determine destination chain
-      const toChain = destChainNum === CONTRACTS.bsc.chainId ? 'bsc' : 
-                      destChainNum === CONTRACTS.solana.chainId ? 'solana' : 'bsc';
-      
-      // Create request
+      // Create request - X Layer 只能桥接到 BSC
       const request: BridgeRequest = {
         txHash,
         fromChain: 'xlayer',
-        toChain,
+        toChain: 'bsc',
         from,
         to,
         amount: amount.toString(),
@@ -474,61 +416,14 @@ class BridgeRelayerService extends EventEmitter {
       // Save to database
       this.saveToDb(request, ethers.formatEther(fee));
       
-      // Process based on destination chain
-      if (destChainNum === CONTRACTS.bsc.chainId) {
-        await this.releaseToBSC(request);
-      } else if (destChainNum === CONTRACTS.solana.chainId) {
-        await this.mintToSolana(request);
-      }
+      // Process - 释放到 BSC
+      await this.releaseToBSC(request);
       
       // 保存区块号
       this.saveLastSyncedBlock('xlayer', event.log.blockNumber);
     });
 
-    // Listen for Solana-specific bridge events
-    bridge.on('BridgeOutSolana', async (from, solanaAddress, amount, fee, nonce, timestamp, event) => {
-      console.log(`\n📤 X Layer BridgeOutSolana detected:`);
-      console.log(`   From: ${from}`);
-      console.log(`   Solana Address: ${solanaAddress}`);
-      console.log(`   Amount: ${ethers.formatEther(amount)} EAGLE`);
-      console.log(`   Nonce: ${nonce}`);
-
-      const txHash = event.log.transactionHash;
-      
-      // Convert bytes32 to Solana address (Base58)
-      // Remove 0x prefix and convert hex to bytes, then to base58
-      const solanaAddressHex = solanaAddress.slice(2); // Remove 0x
-      const solanaAddressBytes = Buffer.from(solanaAddressHex, 'hex');
-      const solanaAddressBase58 = bs58.encode(solanaAddressBytes);
-      
-      console.log(`   Solana Address (Base58): ${solanaAddressBase58}`);
-      
-      // Create request
-      const request: BridgeRequest = {
-        txHash,
-        fromChain: 'xlayer',
-        toChain: 'solana',
-        from,
-        to: solanaAddressBase58, // Use decoded Solana address
-        amount: amount.toString(),
-        nonce: Number(nonce),
-        status: 'pending',
-        createdAt: new Date(),
-      };
-      
-      this.pendingRequests.set(txHash, request);
-      
-      // Save to database
-      this.saveToDb(request, ethers.formatEther(fee));
-      
-      // Process on Solana
-      await this.mintToSolana(request);
-      
-      // 保存区块号
-      this.saveLastSyncedBlock('xlayer', event.log.blockNumber);
-    });
-
-    console.log('👂 Listening for X Layer bridge events (including Solana)...');
+    console.log('👂 Listening for X Layer bridge events...');
   }
 
   private async listenBSCEvents() {
@@ -877,62 +772,56 @@ class BridgeRelayerService extends EventEmitter {
           
           console.log(`   Found event: ${parsed.name}`);
           
-          if (fromChain === 'xlayer' && parsed.name === 'BridgeOut') {
-            const [from, to, amount, fee, destChainId, nonce] = parsed.args;
-            const destChainNum = Number(destChainId);
-            const toChain = destChainNum === CONTRACTS.bsc.chainId ? 'bsc' : 
-                            destChainNum === CONTRACTS.solana.chainId ? 'solana' : 'bsc';
-            
-            const request: BridgeRequest = {
-              txHash,
-              fromChain: 'xlayer',
-              toChain: toChain as any,
-              from,
-              to,
-              amount: amount.toString(),
-              fee: fee?.toString() || '0',
-              nonce: Number(nonce),
-              status: 'pending',
-              createdAt: new Date(),
-            };
-            
-            this.pendingRequests.set(txHash, request);
-            this.saveToDb(request, ethers.formatEther(fee || 0));
-            
-            console.log(`   Processing X Layer -> ${toChain} bridge...`);
-            
-            if (destChainNum === CONTRACTS.bsc.chainId) {
-              await this.releaseToBSC(request);
-            } else if (destChainNum === CONTRACTS.solana.chainId) {
-              await this.mintToSolana(request);
-            }
-            
-            return { received: true, txHash, status: 'processing', toChain };
-          }
-          
-          if (fromChain === 'bsc' && parsed.name === 'BridgeInitiated') {
+          if (parsed.name === 'BridgeInitiated') {
             const [from, to, amount, fee, nonce] = parsed.args;
             
-            const request: BridgeRequest = {
-              txHash,
-              fromChain: 'bsc',
-              toChain: 'xlayer',
-              from,
-              to,
-              amount: amount.toString(),
-              fee: fee?.toString() || '0',
-              nonce: Number(nonce),
-              status: 'pending',
-              createdAt: new Date(),
-            };
+            let request: BridgeRequest;
             
-            this.pendingRequests.set(txHash, request);
-            this.saveToDb(request, ethers.formatEther(fee || 0));
-            
-            console.log(`   Processing BSC -> X Layer bridge...`);
-            await this.releaseToXLayer(request);
-            
-            return { received: true, txHash, status: 'processing', toChain: 'xlayer' };
+            if (fromChain === 'xlayer') {
+              // X Layer -> BSC
+              request = {
+                txHash,
+                fromChain: 'xlayer',
+                toChain: 'bsc',
+                from,
+                to,
+                amount: amount.toString(),
+                fee: fee?.toString() || '0',
+                nonce: Number(nonce),
+                status: 'pending',
+                createdAt: new Date(),
+              };
+              
+              this.pendingRequests.set(txHash, request);
+              this.saveToDb(request, ethers.formatEther(fee || 0));
+              
+              console.log(`   Processing X Layer -> BSC bridge...`);
+              await this.releaseToBSC(request);
+              
+              return { received: true, txHash, status: 'processing', toChain: 'bsc' };
+            } else if (fromChain === 'bsc') {
+              // BSC -> X Layer
+              request = {
+                txHash,
+                fromChain: 'bsc',
+                toChain: 'xlayer',
+                from,
+                to,
+                amount: amount.toString(),
+                fee: fee?.toString() || '0',
+                nonce: Number(nonce),
+                status: 'pending',
+                createdAt: new Date(),
+              };
+              
+              this.pendingRequests.set(txHash, request);
+              this.saveToDb(request, ethers.formatEther(fee || 0));
+              
+              console.log(`   Processing BSC -> X Layer bridge...`);
+              await this.releaseToXLayer(request);
+              
+              return { received: true, txHash, status: 'processing', toChain: 'xlayer' };
+            }
           }
         } catch (e) {
           // Not a bridge event, skip
