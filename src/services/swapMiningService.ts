@@ -485,21 +485,17 @@ export class SwapMiningService {
           if (topNft.bonus_multiplier) {
             nftMultiplier = topNft.bonus_multiplier;
           } else {
-             // 如果没有配置 multiplier, 使用默认逻辑 (例如 1 + weight * 0.001)
-             // 或者根据 Level 1 = 1.05
-             if (topNft.level === 1) nftMultiplier = 1.05;
-             else if (topNft.level === 2) nftMultiplier = 1.2;
-             else if (topNft.level === 3) nftMultiplier = 1.35;
-             else if (topNft.level === 4) nftMultiplier = 1.5;
-             else if (topNft.level === 5) nftMultiplier = 1.7;
-             else if (topNft.level === 6) nftMultiplier = 1.85;
-             else if (topNft.level === 7) nftMultiplier = 2.5;
+             // 如果没有配置 multiplier, 使用默认倍数
+             const defaultMultipliers: { [key: number]: number } = {
+               1: 2.05, 2: 2.20, 3: 2.35, 4: 2.50, 5: 2.70, 6: 2.85, 7: 3.50
+             };
+             nftMultiplier = defaultMultipliers[topNft.level] || 1;
           }
           
           topNftData = {
             level: topNft.level,
             tier_name: topNft.level_name || `Level ${topNft.level}`,
-            boost: (nftMultiplier - 1) * 100, // 额外加成百分比 (例如 1.05 -> 5%)
+            boost: nftMultiplier * 100, // NFT 加成百分比 (例如 2.05 -> 205%)
             weight: topNft.weight || 0
           };
         }
@@ -508,12 +504,12 @@ export class SwapMiningService {
         hasNft = false;
       }
       
-      // 计算加成:
-      // - VIP Boost: 基础 100% + VIP 等级加成 (例如 Bronze = 100%)
-      // - NFT Boost: NFT 额外加成百分比 (例如 2.05x -> 105%)
-      // - Combined Boost: VIP Boost + NFT Boost (例如 100% + 105% = 205%)
-      const nftBoostPercentage = hasNft ? (nftMultiplier - 1) * 100 : 0; 
-      const combinedBoost = tier.boost_percentage + nftBoostPercentage;
+      // 计算加成 (加法叠加):
+      // - NFT Boost: NFT 加成百分比 (例如 2.05x -> 205%)
+      // - VIP Boost: VIP 等级加成 (例如 Bronze = 100%)
+      // - Combined Boost: NFT Boost + VIP Boost (例如 205% + 100% = 305%)
+      const nftBoostPercentage = hasNft ? nftMultiplier * 100 : 0; 
+      const combinedBoost = nftBoostPercentage + tier.boost_percentage;
       
       return {
         success: true,
