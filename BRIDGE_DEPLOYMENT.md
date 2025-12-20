@@ -7,13 +7,13 @@
 
 ### X Layer (Chain ID: 196)
 - **Bridge 合约**: `0xFfa85Db47ba6118B51ce9c65A9cc213060290b62`
-- **EAGLE Token**: `0x5a746ee9933627ed79822d35a3fe812eddd5ba37`
+- **EAGLE Token**: `0x5a746ee9933627ed79822d35a3fe812eddd5ba37` ✅ **新代币地址**
 - **模式**: Lock/Unlock (源链)
 - **Source Chain ID**: 56 (BSC)
 
 ### BSC (Chain ID: 56)
 - **Bridge 合约**: `0xAb13cbC259A592E6b09cf1Ddbdc85eAB7AB2586f`
-- **EAGLE Token**: `0x480F12D2ECEFe1660e72149c57327f5E0646E5c4`
+- **EAGLE Token**: `0x480F12D2ECEFe1660e72149c57327f5E0646E5c4` ✅ **新代币地址**
 - **模式**: Mint/Burn (目标链)
 - **Source Chain ID**: 196 (X Layer)
 
