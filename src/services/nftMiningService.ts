@@ -95,21 +95,13 @@ export class NFTMiningService {
     baseReward: number;
     communityBonus: number;
     totalReward: number;
-    breakdown: {
-      nftCount: number;
-      highestLevel: number;
-      currentYear: number;
-      communityLevel: number;
-      communityBonusPercent: number;
-      isLeader: boolean;
-      daysAccumulated: number;
-    };
+    breakdown: any;
   }> {
     // ============================================
-    // 1. 获取用户持有的 NFT
+    // 1. 获取用户所有 NFT
     // ============================================
     const nfts = db.prepare(`
-      SELECT global_token_id, level, stage, weight, effective_weight, minted_at, created_at
+      SELECT token_id, level, stage, purchase_time
       FROM nft_holders
       WHERE LOWER(owner_address) = LOWER(?)
     `).all(userAddress) as any[];
@@ -134,13 +126,13 @@ export class NFTMiningService {
     // ============================================
     // 2. 获取上次领取时间
     // ============================================
-    const lastClaim = db.prepare(`
+    const lastClaimData = db.prepare(`
       SELECT last_claim_time FROM nft_mining_claims
       WHERE LOWER(user_address) = LOWER(?)
     `).get(userAddress) as any;
     
-    const lastClaimTime = lastClaim?.last_claim_time 
-      ? new Date(lastClaim.last_claim_time) 
+    const lastClaimTime = lastClaimData?.last_claim_time 
+      ? new Date(lastClaimData.last_claim_time) 
       : null;
     
     // ============================================
@@ -164,7 +156,8 @@ export class NFTMiningService {
         ? new Date(nft.minted_at * 1000) // minted_at 是 Unix 时间戳
         : new Date(nft.created_at);
       const startTime = lastClaimTime || nftCreatedAt;
-      const daysHeld = Math.max(0, (now.getTime() - startTime.getTime()) / (1000 * 60 * 60 * 24));
+      const startTimeMs = startTime instanceof Date ? startTime.getTime() : startTime;
+      const daysHeld = Math.max(0, (now.getTime() - startTimeMs) / (1000 * 60 * 60 * 24));
       
       baseReward += dailyReward * daysHeld;
       
@@ -178,7 +171,8 @@ export class NFTMiningService {
       const nftTime = nft.minted_at ? nft.minted_at * 1000 : new Date(nft.created_at).getTime();
       return nftTime < oldest ? nftTime : oldest;
     }, Date.now());
-    const startTimeForDays = lastClaimTime?.getTime() || oldestNft;
+    const lastClaimTimeMs = lastClaimTime instanceof Date ? lastClaimTime.getTime() : null;
+    const startTimeForDays = lastClaimTimeMs || oldestNft;
     const daysAccumulated = Math.max(0, (now.getTime() - startTimeForDays) / (1000 * 60 * 60 * 24));
     
     // ============================================
