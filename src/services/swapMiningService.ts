@@ -4,7 +4,7 @@ import { ethers } from 'ethers';
 // 多链合约地址配置
 const SWAP_MINING_CONTRACTS: Record<number, string> = {
   196: process.env.SWAP_MINING_XLAYER_ADDRESS || '0x8300Bcf9A420b7831626CCEe9c042fEaA5D3A4Ce',  // X Layer
-  56: process.env.SWAP_MINING_BSC_ADDRESS || '0x1c5fD42F77F5D331F08174b1e9dA6E3986cc8364',   // BSC
+  56: process.env.SWAP_MINING_BSC_ADDRESS || '0xCC80F8Db6583353308f05EF227842Aa6BBF03B9F',   // BSC
 };
 
 /**
@@ -626,8 +626,8 @@ export class SwapMiningService {
         throw new Error(`No contract address configured for chain ${chainId}`);
       }
       
-      // 4. 获取用户 nonce (从数据库)
-      const userNonce = await this.getUserNonce(userAddress);
+      // 4. 获取用户 nonce (从数据库，按链分开)
+      const userNonce = await this.getUserNonce(userAddress, chainId);
       
       // 5. 设置签名过期时间
       const expiryMinutes = parseInt(process.env.SIGNATURE_EXPIRY_MINUTES || '30');
@@ -702,20 +702,20 @@ export class SwapMiningService {
   }
   
   /**
-   * 获取用户 nonce (防重放攻击)
+   * 获取用户 nonce (防重放攻击，按链分开)
    */
-  private async getUserNonce(userAddress: string): Promise<number> {
+  private async getUserNonce(userAddress: string, chainId: number): Promise<number> {
     try {
-      // 从数据库获取或初始化 nonce
+      // 从数据库获取或初始化 nonce (按链分开)
       let nonceRecord = db.prepare(`
-        SELECT nonce FROM user_claim_nonce WHERE user_address = ?
-      `).get(userAddress.toLowerCase()) as any;
+        SELECT nonce FROM user_claim_nonce WHERE user_address = ? AND chain_id = ?
+      `).get(userAddress.toLowerCase(), chainId) as any;
       
       if (!nonceRecord) {
         // 初始化 nonce
         db.prepare(`
-          INSERT INTO user_claim_nonce (user_address, nonce) VALUES (?, 0)
-        `).run(userAddress.toLowerCase());
+          INSERT INTO user_claim_nonce (user_address, chain_id, nonce) VALUES (?, ?, 0)
+        `).run(userAddress.toLowerCase(), chainId);
         return 0;
       }
       
@@ -730,9 +730,9 @@ export class SwapMiningService {
    * 标记奖励已领取 (在用户成功调用合约后调用)
    * @param userAddress 用户地址
    * @param amount 领取数量
-   * @param chainId 领取的链 ID (仅用于日志记录)
+   * @param chainId 领取的链 ID (必需，用于更新对应链的 nonce)
    */
-  async markRewardsClaimed(userAddress: string, amount: number, chainId?: number) {
+  async markRewardsClaimed(userAddress: string, amount: number, chainId: number = 196) {
     try {
       // 更新已领取统计
       db.prepare(`
@@ -744,14 +744,15 @@ export class SwapMiningService {
           updated_at = datetime('now')
       `).run(userAddress.toLowerCase(), amount, amount);
       
-      // 增加 nonce
+      // 增加对应链的 nonce
       db.prepare(`
         UPDATE user_claim_nonce 
-        SET nonce = nonce + 1 
-        WHERE user_address = ?
-      `).run(userAddress.toLowerCase());
+        SET nonce = nonce + 1,
+            updated_at = datetime('now')
+        WHERE user_address = ? AND chain_id = ?
+      `).run(userAddress.toLowerCase(), chainId);
       
-      console.log(`✅ 标记已领取: ${userAddress} → ${amount} EAGLE (Chain: ${chainId || 196})`);
+      console.log(`✅ 标记已领取: ${userAddress} → ${amount} EAGLE (Chain: ${chainId})`);
       
       return { success: true };
     } catch (error) {
