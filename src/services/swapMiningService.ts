@@ -4,7 +4,7 @@ import { ethers } from 'ethers';
 // 多链合约地址配置
 const SWAP_MINING_CONTRACTS: Record<number, string> = {
   196: process.env.SWAP_MINING_XLAYER_ADDRESS || '0x8300Bcf9A420b7831626CCEe9c042fEaA5D3A4Ce',  // X Layer
-  56: process.env.SWAP_MINING_BSC_ADDRESS || '0xCC80F8Db6583353308f05EF227842Aa6BBF03B9F',   // BSC
+  56: process.env.SWAP_MINING_BSC_ADDRESS || '0x1c5fD42F77F5D331F08174b1e9dA6E3986cc8364',   // BSC
 };
 
 /**
