@@ -391,6 +391,7 @@ export class NFTMiningService {
     highestLevel: number;
     totalClaimed: number;
     pendingReward: number;
+    lastClaimTime: string | null;
     breakdown: any;
   }> {
     // 获取 NFT 数量和最高等级（统计所有链）
@@ -403,9 +404,11 @@ export class NFTMiningService {
       WHERE LOWER(owner_address) = LOWER(?)
     `).get(userAddress) as any;
     
-    // 获取已领取总量
+    // 获取已领取总量和最后领取时间
     const claimStats = db.prepare(`
-      SELECT COALESCE(total_claimed, 0) as total_claimed
+      SELECT 
+        COALESCE(total_claimed, 0) as total_claimed,
+        last_claim_time
       FROM nft_mining_claims
       WHERE LOWER(user_address) = LOWER(?)
     `).get(userAddress) as any;
@@ -418,6 +421,7 @@ export class NFTMiningService {
       highestLevel: nftStats?.highest_level || 0,
       totalClaimed: parseFloat(claimStats?.total_claimed || '0'),
       pendingReward: pending.totalReward,
+      lastClaimTime: claimStats?.last_claim_time || null,
       breakdown: pending.breakdown
     };
   }
