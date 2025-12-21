@@ -98,10 +98,10 @@ export class NFTMiningService {
     breakdown: any;
   }> {
     // ============================================
-    // 1. 获取用户所有 NFT
+    // 1. 获取用户所有 NFT（支持多链）
     // ============================================
     const nfts = db.prepare(`
-      SELECT token_id, level, stage, purchase_time
+      SELECT global_token_id, level, stage, minted_at, chain_id, chain_name
       FROM nft_holders
       WHERE LOWER(owner_address) = LOWER(?)
     `).all(userAddress) as any[];
@@ -384,7 +384,7 @@ export class NFTMiningService {
   }
   
   /**
-   * 获取用户挖矿统计
+   * 获取用户挖矿统计（支持多链）
    */
   async getUserStats(userAddress: string): Promise<{
     nftCount: number;
@@ -393,11 +393,12 @@ export class NFTMiningService {
     pendingReward: number;
     breakdown: any;
   }> {
-    // 获取 NFT 数量和最高等级
+    // 获取 NFT 数量和最高等级（统计所有链）
     const nftStats = db.prepare(`
       SELECT 
         COUNT(*) as count,
-        MAX(level) as highest_level
+        MAX(level) as highest_level,
+        COUNT(DISTINCT chain_id) as chain_count
       FROM nft_holders
       WHERE LOWER(owner_address) = LOWER(?)
     `).get(userAddress) as any;
