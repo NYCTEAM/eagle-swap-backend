@@ -7,7 +7,7 @@ const router = express.Router();
 // OKX API Configuration
 const OKX_API_KEY = process.env.OKX_API_KEY || '';
 const OKX_API_SECRET = process.env.OKX_API_SECRET || '';
-const OKX_API_PASSPHRASE = process.env.OKX_API_PASSPHRASE || '';
+const OKX_API_PROJECT = process.env.OKX_API_PROJECT || ''; // Project ID for developer API
 
 /**
  * Generate OKX API signature
@@ -108,13 +108,21 @@ router.get('/quote', async (req: Request, res: Response) => {
 
     // Generate OKX API signature
     // For GET requests, signature format: timestamp + method + requestPath (no query string, no body)
-    const timestamp = new Date().toISOString();
+    // OKX requires Unix timestamp in seconds (not milliseconds, not ISO format)
+    const timestamp = Math.floor(Date.now() / 1000).toString();
     const method = 'GET';
     const requestPath = '/api/v5/dex/cross-chain/quote';
     const signature = generateOKXSignature(timestamp, method, requestPath, ''); // Empty body for GET
+    
+    console.log('🔐 Auth Debug:');
+    console.log('   Timestamp:', timestamp);
+    console.log('   API Key:', OKX_API_KEY ? 'Set' : 'Missing');
+    console.log('   Secret:', OKX_API_SECRET ? 'Set' : 'Missing');
+    console.log('   Project:', OKX_API_PROJECT ? 'Set' : 'Missing');
 
     // Call OKX API with authentication
-    const okxUrl = 'https://www.okx.com/api/v5/dex/cross-chain/quote';
+    // Using web3.okx.com domain for developer API
+    const okxUrl = 'https://web3.okx.com/api/v5/dex/cross-chain/quote';
     const response = await axios.get(okxUrl, {
       params: {
         fromChainId,
@@ -128,10 +136,10 @@ router.get('/quote', async (req: Request, res: Response) => {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        'OK-ACCESS-PROJECT': OKX_API_PROJECT,
         'OK-ACCESS-KEY': OKX_API_KEY,
         'OK-ACCESS-SIGN': signature,
         'OK-ACCESS-TIMESTAMP': timestamp,
-        'OK-ACCESS-PASSPHRASE': OKX_API_PASSPHRASE,
       },
       timeout: 30000
     });
