@@ -156,7 +156,7 @@ router.get('/quote', async (req: Request, res: Response) => {
           'OK-ACCESS-KEY': OKX_API_KEY,
           'OK-ACCESS-SIGN': signature,
           'OK-ACCESS-TIMESTAMP': timestamp,
-          'OK-ACCESS-PASSPHRASE': OKX_API_PASSPHRASE,
+          'OK-ACCESS-PROJECT': OKX_API_PROJECT || OKX_API_PASSPHRASE,  // Use PROJECT if available, fallback to PASSPHRASE
         },
         timeout: 30000
       });
@@ -220,23 +220,40 @@ router.get('/quote', async (req: Request, res: Response) => {
       // LI.FI API response format
       console.log('✅ Processing LI.FI API response');
       
-      if (!response.data || response.data.message === 'No possible route found') {
+      if (!response.data || response.data.message === 'No possible route found' || response.data.message?.includes('No route found')) {
         console.error('❌ No bridge route found in LI.FI response');
+        console.error('   This chain combination may not be supported');
+        console.error('   Try using a different target chain or token');
         return res.status(404).json({
           success: false,
-          error: 'No bridge route found'
+          error: 'No bridge route found for this chain combination',
+          suggestion: 'Try BSC → Ethereum or use supported tokens like USDT'
         });
       }
 
       const lifiQuote = response.data;
 
       // Convert LI.FI response to OKX-compatible format
+      const toAmount = lifiQuote.estimate?.toAmount || '0';
+      const toAmountMin = lifiQuote.estimate?.toAmountMin || '0';
+      
+      // Check if we got a valid quote
+      if (toAmount === '0' || !lifiQuote.transactionRequest?.to) {
+        console.error('❌ LI.FI returned invalid quote (zero amount or no target contract)');
+        console.error('   Chain combination BSC → X Layer may not be supported');
+        return res.status(404).json({
+          success: false,
+          error: 'Chain combination not supported',
+          suggestion: 'X Layer may not be supported by bridge providers. Try BSC → Ethereum instead.'
+        });
+      }
+      
       quote = {
         routerList: [{
           router: lifiQuote.toolDetails?.name || 'LI.FI',
           routerName: lifiQuote.toolDetails?.name || 'LI.FI Bridge',
-          toTokenAmount: lifiQuote.estimate?.toAmount || '0',
-          minToTokenAmount: lifiQuote.estimate?.toAmountMin || '0',
+          toTokenAmount: toAmount,
+          minToTokenAmount: toAmountMin,
           crossChainFee: {
             amount: lifiQuote.estimate?.gasCosts?.[0]?.amount || '0',
             tokenAddress: lifiQuote.estimate?.gasCosts?.[0]?.token?.address || ''
