@@ -11,9 +11,11 @@ const OKX_API_PASSPHRASE = process.env.OKX_API_PASSPHRASE || '';
 
 /**
  * Generate OKX API signature
+ * Format: timestamp + method + requestPath + body
+ * For GET requests, body is empty
  */
-function generateOKXSignature(timestamp: string, method: string, requestPath: string, queryString: string = ''): string {
-  const message = timestamp + method + requestPath + (queryString ? '?' + queryString : '');
+function generateOKXSignature(timestamp: string, method: string, requestPath: string, body: string = ''): string {
+  const message = timestamp + method + requestPath + body;
   const hmac = crypto.createHmac('sha256', OKX_API_SECRET);
   return hmac.update(message).digest('base64');
 }
@@ -104,23 +106,12 @@ router.get('/quote', async (req: Request, res: Response) => {
     console.log('   Amount:', amount);
     console.log('   User:', userWalletAddress);
 
-    // Build query string for signature
-    const queryParams = new URLSearchParams({
-      fromChainId,
-      toChainId,
-      fromTokenAddress,
-      toTokenAddress,
-      amount,
-      userWalletAddress,
-      slippage
-    });
-    const queryString = queryParams.toString();
-
     // Generate OKX API signature
+    // For GET requests, signature format: timestamp + method + requestPath (no query string, no body)
     const timestamp = new Date().toISOString();
     const method = 'GET';
     const requestPath = '/api/v5/dex/cross-chain/quote';
-    const signature = generateOKXSignature(timestamp, method, requestPath, queryString);
+    const signature = generateOKXSignature(timestamp, method, requestPath, ''); // Empty body for GET
 
     // Call OKX API with authentication
     const okxUrl = 'https://www.okx.com/api/v5/dex/cross-chain/quote';
