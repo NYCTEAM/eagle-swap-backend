@@ -165,8 +165,16 @@ router.get('/quote', async (req: Request, res: Response) => {
       isOKXResponse = true;
       
     } catch (okxError: any) {
-      console.log('❌ OKX Trading API failed:', okxError.response?.status, okxError.response?.data?.msg || okxError.message);
-      console.log('   Full OKX Error:', JSON.stringify(okxError.response?.data, null, 2));
+      // Log error but don't fail yet - try LI.FI fallback
+      const status = okxError.response?.status;
+      const msg = okxError.response?.data?.msg || okxError.message;
+      
+      console.log(`⚠️ OKX API unavailable or failed (${status}): ${msg}`);
+      
+      if (okxError.response?.data) {
+        console.log('   Full OKX Error:', JSON.stringify(okxError.response.data));
+      }
+      
       console.log('🔄 Falling back to LI.FI API...');
       
       // Fallback to LI.FI
