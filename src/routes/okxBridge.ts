@@ -139,7 +139,8 @@ router.get('/quote', async (req: Request, res: Response) => {
     let isOKXResponse = false;
     
     try {
-      const okxUrl = 'https://www.okx.com/api/v5/dex/cross-chain/quote';
+      // Use web3.okx.com as per official examples
+      const okxUrl = 'https://web3.okx.com/api/v5/dex/cross-chain/quote';
       response = await axios.get(okxUrl, {
         params: {
           fromChainId,
@@ -156,7 +157,9 @@ router.get('/quote', async (req: Request, res: Response) => {
           'OK-ACCESS-KEY': OKX_API_KEY,
           'OK-ACCESS-SIGN': signature,
           'OK-ACCESS-TIMESTAMP': timestamp,
-          'OK-ACCESS-PROJECT': OKX_API_PROJECT || OKX_API_PASSPHRASE,  // Use PROJECT if available, fallback to PASSPHRASE
+          'OK-ACCESS-PASSPHRASE': OKX_API_PASSPHRASE,
+          'OK-ACCESS-PROJECT': OKX_API_PROJECT,
+          'x-simulated-trading': '0', // Add this header
         },
         timeout: 30000
       });
@@ -205,10 +208,11 @@ router.get('/quote', async (req: Request, res: Response) => {
     let quote;
     
     if (isOKXResponse && response.data.code === '0') {
-      // OKX API response format
+      // OKX API response format (官方文档确认 data 是对象，不是数组)
       console.log('✅ Processing OKX API response');
+      console.log('📊 OKX Raw Response:', JSON.stringify(response.data, null, 2));
       
-      if (!response.data.data || response.data.data.length === 0) {
+      if (!response.data.data || !response.data.data.routerList || response.data.data.routerList.length === 0) {
         console.error('❌ No bridge route found in OKX response');
         return res.status(404).json({
           success: false,
@@ -216,13 +220,36 @@ router.get('/quote', async (req: Request, res: Response) => {
         });
       }
       
-      quote = response.data.data[0];
+      // OKX data 是对象，包含 routerList 数组
+      const okxData = response.data.data;
+      const firstRoute = okxData.routerList[0];
+      
+      quote = {
+        routerList: [{
+          router: firstRoute.router?.bridgeName || 'OKX Bridge',
+          routerName: firstRoute.router?.bridgeName || 'OKX Bridge',
+          toTokenAmount: firstRoute.toTokenAmount || '0',
+          minToTokenAmount: firstRoute.minimumReceived || '0',
+          crossChainFee: {
+            amount: firstRoute.router?.crossChainFee || '0',
+            tokenAddress: firstRoute.router?.crossChainFeeTokenAddress || ''
+          },
+          estimateGasFee: firstRoute.router?.estimateGasFee || '0'
+        }],
+        tx: {
+          from: userWalletAddress,
+          to: firstRoute.router?.bridgeContractAddress || '',
+          data: firstRoute.txData || '0x',
+          value: amount,
+          gasPrice: '0',
+          gas: firstRoute.router?.estimateGasFee || '0'
+        }
+      };
       
       console.log('✅ OKX Bridge quote received:');
-      console.log('   Router:', quote.routerList[0]?.router);
-      console.log('   Output:', quote.routerList[0]?.toTokenAmount);
-      console.log('   Min Output:', quote.routerList[0]?.minToTokenAmount);
-      console.log('   Target Contract:', quote.tx.to);
+      console.log('   Bridge:', firstRoute.router?.bridgeName);
+      console.log('   Output:', firstRoute.toTokenAmount);
+      console.log('   Min Output:', firstRoute.minimumReceived);
       
     } else {
       // LI.FI API response format
