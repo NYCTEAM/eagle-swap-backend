@@ -1,14 +1,30 @@
 import express, { Request, Response } from 'express';
 import axios from 'axios';
+import crypto from 'crypto';
 
 const router = express.Router();
 
+// OKX API Configuration
+const OKX_API_KEY = process.env.OKX_API_KEY || '';
+const OKX_API_SECRET = process.env.OKX_API_SECRET || '';
+const OKX_API_PASSPHRASE = process.env.OKX_API_PASSPHRASE || '';
+
 /**
- * OKX Cross-Chain Bridge API Proxy
+ * Generate OKX API signature
+ */
+function generateOKXSignature(timestamp: string, method: string, requestPath: string, queryString: string = ''): string {
+  const message = timestamp + method + requestPath + (queryString ? '?' + queryString : '');
+  const hmac = crypto.createHmac('sha256', OKX_API_SECRET);
+  return hmac.update(message).digest('base64');
+}
+
+/**
+ * Cross-Chain Bridge API Proxy using LI.FI
  * 
- * This proxy solves CORS issues by forwarding requests from frontend to OKX API
+ * LI.FI is a cross-chain bridge aggregator that is completely free and requires no API key
+ * It aggregates multiple bridges including Stargate, Hop, Across, and more
  * 
- * Documentation: https://web3.okx.com/zh-hans/build/docs/waas/dex-crosschain-aggregator
+ * Documentation: https://docs.li.fi/
  */
 
 interface OKXBridgeQuoteParams {
@@ -82,15 +98,33 @@ router.get('/quote', async (req: Request, res: Response) => {
       });
     }
 
-    console.log('🌉 Proxying OKX Bridge quote request:');
+    console.log('🌉 Fetching cross-chain quote from OKX:');
     console.log('   From:', fromChainId, fromTokenAddress);
     console.log('   To:', toChainId, toTokenAddress);
     console.log('   Amount:', amount);
     console.log('   User:', userWalletAddress);
 
-    // Call OKX API
+    // Build query string for signature
+    const queryParams = new URLSearchParams({
+      fromChainId,
+      toChainId,
+      fromTokenAddress,
+      toTokenAddress,
+      amount,
+      userWalletAddress,
+      slippage
+    });
+    const queryString = queryParams.toString();
+
+    // Generate OKX API signature
+    const timestamp = new Date().toISOString();
+    const method = 'GET';
+    const requestPath = '/api/v5/dex/cross-chain/quote';
+    const signature = generateOKXSignature(timestamp, method, requestPath, queryString);
+
+    // Call OKX API with authentication
     const okxUrl = 'https://www.okx.com/api/v5/dex/cross-chain/quote';
-    const response = await axios.get<OKXBridgeQuoteResponse>(okxUrl, {
+    const response = await axios.get(okxUrl, {
       params: {
         fromChainId,
         toChainId,
@@ -103,8 +137,12 @@ router.get('/quote', async (req: Request, res: Response) => {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        'OK-ACCESS-KEY': OKX_API_KEY,
+        'OK-ACCESS-SIGN': signature,
+        'OK-ACCESS-TIMESTAMP': timestamp,
+        'OK-ACCESS-PASSPHRASE': OKX_API_PASSPHRASE,
       },
-      timeout: 30000 // 30 seconds timeout
+      timeout: 30000
     });
 
     // Check OKX API response
