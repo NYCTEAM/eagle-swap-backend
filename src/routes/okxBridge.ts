@@ -125,6 +125,8 @@ router.get('/quote', async (req: Request, res: Response) => {
     console.log('🔄 Testing OKX Trading API...');
     
     let response;
+    let isOKXResponse = false;
+    
     try {
       const okxUrl = 'https://www.okx.com/api/v5/dex/cross-chain/quote';
       response = await axios.get(okxUrl, {
@@ -149,9 +151,11 @@ router.get('/quote', async (req: Request, res: Response) => {
       });
       
       console.log('✅ OKX Trading API works!');
+      isOKXResponse = true;
       
     } catch (okxError: any) {
-      console.log('❌ OKX Trading API failed:', okxError.response?.data?.msg || okxError.message);
+      console.log('❌ OKX Trading API failed:', okxError.response?.status, okxError.response?.data?.msg || okxError.message);
+      console.log('   Full OKX Error:', JSON.stringify(okxError.response?.data, null, 2));
       console.log('🔄 Falling back to LI.FI API...');
       
       // Fallback to LI.FI
@@ -172,12 +176,15 @@ router.get('/quote', async (req: Request, res: Response) => {
         },
         timeout: 30000
       });
+      
+      console.log('✅ LI.FI API called successfully');
+      isOKXResponse = false;
     }
 
     // Handle response based on API type
     let quote;
     
-    if (response.data.code === '0') {
+    if (isOKXResponse && response.data.code === '0') {
       // OKX API response format
       console.log('✅ Processing OKX API response');
       
