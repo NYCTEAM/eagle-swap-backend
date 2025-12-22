@@ -340,6 +340,201 @@ router.get('/quote', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/okx-bridge/build-tx
+ * 
+ * Build cross-chain transaction with OKX
+ * This endpoint returns the actual transaction data needed to execute the swap
+ * 
+ * Query Parameters: Same as /quote plus optional parameters
+ */
+router.get('/build-tx', async (req: Request, res: Response) => {
+  try {
+    const {
+      fromChainId,
+      toChainId,
+      fromTokenAddress,
+      toTokenAddress,
+      amount,
+      userWalletAddress,
+      slippage = '0.5',
+      sort,
+      dexIds,
+      receiveAddress,
+      feePercent,
+      referrerAddress,
+      priceImpactProtectionPercentage,
+      onlyBridge
+    } = req.query;
+
+    // Validate required parameters
+    if (!fromChainId || !toChainId || !fromTokenAddress || !toTokenAddress || !amount || !userWalletAddress) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required parameters',
+        required: ['fromChainId', 'toChainId', 'fromTokenAddress', 'toTokenAddress', 'amount', 'userWalletAddress']
+      });
+    }
+
+    console.log('🔨 Building OKX cross-chain transaction...');
+    console.log('   From:', fromChainId, fromTokenAddress);
+    console.log('   To:', toChainId, toTokenAddress);
+    console.log('   Amount:', amount);
+
+    // Generate OKX API signature
+    const timestamp = new Date().toISOString();
+    const method = 'GET';
+    const requestPath = '/api/v5/dex/cross-chain/build-tx';
+    
+    // Build query string for signature
+    const queryParams: any = {
+      fromChainId,
+      toChainId,
+      fromTokenAddress,
+      toTokenAddress,
+      amount,
+      userWalletAddress,
+      slippage
+    };
+    
+    // Add optional parameters
+    if (sort) queryParams.sort = sort;
+    if (dexIds) queryParams.dexIds = dexIds;
+    if (receiveAddress) queryParams.receiveAddress = receiveAddress;
+    if (feePercent) queryParams.feePercent = feePercent;
+    if (referrerAddress) queryParams.referrerAddress = referrerAddress;
+    if (priceImpactProtectionPercentage) queryParams.priceImpactProtectionPercentage = priceImpactProtectionPercentage;
+    if (onlyBridge) queryParams.onlyBridge = onlyBridge;
+    
+    const queryString = '?' + new URLSearchParams(queryParams).toString();
+    const signature = generateOKXSignature(timestamp, method, requestPath, queryString, '');
+
+    let response;
+    let isOKXResponse = false;
+
+    try {
+      // Call OKX build-tx API
+      const okxUrl = 'https://web3.okx.com/api/v5/dex/cross-chain/build-tx';
+      response = await axios.get(okxUrl, {
+        params: queryParams,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'OK-ACCESS-KEY': OKX_API_KEY,
+          'OK-ACCESS-SIGN': signature,
+          'OK-ACCESS-TIMESTAMP': timestamp,
+          'OK-ACCESS-PASSPHRASE': OKX_API_PASSPHRASE,
+          'OK-ACCESS-PROJECT': OKX_API_PROJECT,
+        },
+        timeout: 30000
+      });
+
+      console.log('✅ OKX build-tx successful!');
+      console.log('📊 OKX TX Response:', JSON.stringify(response.data, null, 2));
+      isOKXResponse = true;
+
+    } catch (okxError: any) {
+      const status = okxError.response?.status;
+      const msg = okxError.response?.data?.msg || okxError.message;
+      
+      console.log(`⚠️ OKX build-tx failed (${status}): ${msg}`);
+      
+      if (okxError.response?.data) {
+        console.log('   Full OKX Error:', JSON.stringify(okxError.response.data));
+      }
+      
+      console.log('🔄 Falling back to LI.FI API...');
+      
+      // Fallback to LI.FI
+      const lifiUrl = 'https://li.quest/v1/quote';
+      response = await axios.get(lifiUrl, {
+        params: {
+          fromChain: fromChainId,
+          toChain: toChainId,
+          fromToken: fromTokenAddress,
+          toToken: toTokenAddress,
+          fromAmount: amount,
+          fromAddress: userWalletAddress,
+          slippage: parseFloat(slippage as string) / 100,
+        },
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        timeout: 30000
+      });
+      
+      console.log('✅ LI.FI API called successfully');
+      isOKXResponse = false;
+    }
+
+    // Handle response
+    let txData;
+    
+    if (isOKXResponse && response.data.code === '0') {
+      // OKX response format
+      const okxData = response.data.data;
+      
+      txData = {
+        tx: okxData.tx,
+        router: okxData.router,
+        fromTokenAmount: okxData.fromTokenAmount,
+        toTokenAmount: okxData.toTokenAmount,
+        minimumReceived: okxData.minmumReceive || okxData.minimumReceived
+      };
+      
+      console.log('✅ OKX transaction data ready');
+      console.log('   To:', txData.tx.to);
+      console.log('   Value:', txData.tx.value);
+      console.log('   Gas Limit:', txData.tx.gasLimit);
+      
+    } else {
+      // LI.FI response format
+      const lifiQuote = response.data;
+      
+      if (!lifiQuote.transactionRequest) {
+        return res.status(404).json({
+          success: false,
+          error: 'No transaction data available'
+        });
+      }
+      
+      txData = {
+        tx: {
+          from: lifiQuote.transactionRequest.from || userWalletAddress,
+          to: lifiQuote.transactionRequest.to,
+          data: lifiQuote.transactionRequest.data,
+          value: lifiQuote.transactionRequest.value || '0',
+          gasLimit: lifiQuote.transactionRequest.gasLimit || '500000',
+          gasPrice: lifiQuote.transactionRequest.gasPrice || '0'
+        },
+        router: {
+          bridgeName: lifiQuote.toolDetails?.name || 'LI.FI'
+        },
+        fromTokenAmount: amount,
+        toTokenAmount: lifiQuote.estimate?.toAmount || '0',
+        minimumReceived: lifiQuote.estimate?.toAmountMin || '0'
+      };
+      
+      console.log('✅ LI.FI transaction data ready');
+    }
+
+    res.json({
+      success: true,
+      data: txData
+    });
+
+  } catch (error: any) {
+    console.error('❌ Error building transaction:', error.message);
+    
+    res.status(500).json({
+      success: false,
+      error: 'Failed to build transaction',
+      message: error.message
+    });
+  }
+});
+
+/**
  * GET /api/okx-bridge/supported-chains
  * 
  * Get list of supported chains from OKX
