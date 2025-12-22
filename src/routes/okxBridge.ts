@@ -189,6 +189,7 @@ router.get('/quote', async (req: Request, res: Response) => {
       });
       
       console.log('✅ LI.FI API called successfully');
+      console.log('📊 LI.FI Raw Response:', JSON.stringify(response.data, null, 2));
       isOKXResponse = false;
     }
 
