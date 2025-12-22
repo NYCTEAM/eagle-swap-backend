@@ -7,7 +7,8 @@ const router = express.Router();
 // OKX API Configuration
 const OKX_API_KEY = process.env.OKX_API_KEY || '';
 const OKX_API_SECRET = process.env.OKX_API_SECRET || '';
-const OKX_API_PROJECT = process.env.OKX_API_PROJECT || ''; // Project ID for developer API
+const OKX_API_PASSPHRASE = process.env.OKX_API_PASSPHRASE || '';
+const OKX_API_PROJECT = process.env.OKX_API_PROJECT || '';
 
 /**
  * Generate OKX API signature
@@ -118,70 +119,129 @@ router.get('/quote', async (req: Request, res: Response) => {
     console.log('   Timestamp:', timestamp);
     console.log('   API Key:', OKX_API_KEY ? 'Set' : 'Missing');
     console.log('   Secret:', OKX_API_SECRET ? 'Set' : 'Missing');
-    console.log('   Project:', OKX_API_PROJECT ? 'Set' : 'Missing');
+    console.log('   Passphrase:', OKX_API_PASSPHRASE ? 'Set' : 'Missing');
 
-    // Temporarily use LI.FI API (free, no auth needed) until OKX developer API is ready
-    console.log('🔄 Using LI.FI API temporarily (OKX developer API not configured)');
+    // Try OKX API first (trading API format with PASSPHRASE)
+    console.log('🔄 Testing OKX Trading API...');
     
-    const lifiUrl = 'https://li.quest/v1/quote';
-    const response = await axios.get(lifiUrl, {
-      params: {
-        fromChain: fromChainId,
-        toChain: toChainId,
-        fromToken: fromTokenAddress,
-        toToken: toTokenAddress,
-        fromAmount: amount,
-        fromAddress: userWalletAddress,
-        slippage: parseFloat(slippage) / 100, // LI.FI uses decimal (0.005 = 0.5%)
-      },
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      timeout: 30000
-    });
-
-    // Check LI.FI API response
-    if (!response.data || response.data.message === 'No possible route found') {
-      console.error('❌ No bridge route found');
-      return res.status(404).json({
-        success: false,
-        error: 'No bridge route found'
+    let response;
+    try {
+      const okxUrl = 'https://www.okx.com/api/v5/dex/cross-chain/quote';
+      response = await axios.get(okxUrl, {
+        params: {
+          fromChainId,
+          toChainId,
+          fromTokenAddress,
+          toTokenAddress,
+          amount,
+          userWalletAddress,
+          slippage
+        },
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'OK-ACCESS-KEY': OKX_API_KEY,
+          'OK-ACCESS-SIGN': signature,
+          'OK-ACCESS-TIMESTAMP': timestamp,
+          'OK-ACCESS-PASSPHRASE': OKX_API_PASSPHRASE,
+        },
+        timeout: 30000
+      });
+      
+      console.log('✅ OKX Trading API works!');
+      
+    } catch (okxError: any) {
+      console.log('❌ OKX Trading API failed:', okxError.response?.data?.msg || okxError.message);
+      console.log('🔄 Falling back to LI.FI API...');
+      
+      // Fallback to LI.FI
+      const lifiUrl = 'https://li.quest/v1/quote';
+      response = await axios.get(lifiUrl, {
+        params: {
+          fromChain: fromChainId,
+          toChain: toChainId,
+          fromToken: fromTokenAddress,
+          toToken: toTokenAddress,
+          fromAmount: amount,
+          fromAddress: userWalletAddress,
+          slippage: parseFloat(slippage) / 100,
+        },
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        timeout: 30000
       });
     }
 
-    const lifiQuote = response.data;
-
-    // Convert LI.FI response to OKX-compatible format
-    const quote = {
-      routerList: [{
-        router: lifiQuote.toolDetails?.name || 'LI.FI',
-        routerName: lifiQuote.toolDetails?.name || 'LI.FI Bridge',
-        toTokenAmount: lifiQuote.estimate?.toAmount || '0',
-        minToTokenAmount: lifiQuote.estimate?.toAmountMin || '0',
-        crossChainFee: {
-          amount: lifiQuote.estimate?.gasCosts?.[0]?.amount || '0',
-          tokenAddress: lifiQuote.estimate?.gasCosts?.[0]?.token?.address || ''
-        },
-        estimateGasFee: lifiQuote.estimate?.executionDuration || '0'
-      }],
-      tx: {
-        from: lifiQuote.transactionRequest?.from || userWalletAddress,
-        to: lifiQuote.transactionRequest?.to || '',
-        data: lifiQuote.transactionRequest?.data || '0x',
-        value: lifiQuote.transactionRequest?.value || '0',
-        gasPrice: lifiQuote.transactionRequest?.gasPrice || '0',
-        gas: lifiQuote.transactionRequest?.gasLimit || '0'
+    // Handle response based on API type
+    let quote;
+    
+    if (response.data.code === '0') {
+      // OKX API response format
+      console.log('✅ Processing OKX API response');
+      
+      if (!response.data.data || response.data.data.length === 0) {
+        console.error('❌ No bridge route found in OKX response');
+        return res.status(404).json({
+          success: false,
+          error: 'No bridge route found'
+        });
       }
-    };
+      
+      quote = response.data.data[0];
+      
+      console.log('✅ OKX Bridge quote received:');
+      console.log('   Router:', quote.routerList[0]?.router);
+      console.log('   Output:', quote.routerList[0]?.toTokenAmount);
+      console.log('   Min Output:', quote.routerList[0]?.minToTokenAmount);
+      console.log('   Target Contract:', quote.tx.to);
+      
+    } else {
+      // LI.FI API response format
+      console.log('✅ Processing LI.FI API response');
+      
+      if (!response.data || response.data.message === 'No possible route found') {
+        console.error('❌ No bridge route found in LI.FI response');
+        return res.status(404).json({
+          success: false,
+          error: 'No bridge route found'
+        });
+      }
 
-    console.log('✅ LI.FI Bridge quote received:');
-    console.log('   Tool:', quote.routerList[0]?.routerName);
-    console.log('   Output:', quote.routerList[0]?.toTokenAmount);
-    console.log('   Min Output:', quote.routerList[0]?.minToTokenAmount);
-    console.log('   Target Contract:', quote.tx.to);
+      const lifiQuote = response.data;
 
-    // Return successful response in OKX format
+      // Convert LI.FI response to OKX-compatible format
+      quote = {
+        routerList: [{
+          router: lifiQuote.toolDetails?.name || 'LI.FI',
+          routerName: lifiQuote.toolDetails?.name || 'LI.FI Bridge',
+          toTokenAmount: lifiQuote.estimate?.toAmount || '0',
+          minToTokenAmount: lifiQuote.estimate?.toAmountMin || '0',
+          crossChainFee: {
+            amount: lifiQuote.estimate?.gasCosts?.[0]?.amount || '0',
+            tokenAddress: lifiQuote.estimate?.gasCosts?.[0]?.token?.address || ''
+          },
+          estimateGasFee: lifiQuote.estimate?.executionDuration || '0'
+        }],
+        tx: {
+          from: lifiQuote.transactionRequest?.from || userWalletAddress,
+          to: lifiQuote.transactionRequest?.to || '',
+          data: lifiQuote.transactionRequest?.data || '0x',
+          value: lifiQuote.transactionRequest?.value || '0',
+          gasPrice: lifiQuote.transactionRequest?.gasPrice || '0',
+          gas: lifiQuote.transactionRequest?.gasLimit || '0'
+        }
+      };
+
+      console.log('✅ LI.FI Bridge quote received:');
+      console.log('   Tool:', quote.routerList[0]?.routerName);
+      console.log('   Output:', quote.routerList[0]?.toTokenAmount);
+      console.log('   Min Output:', quote.routerList[0]?.minToTokenAmount);
+      console.log('   Target Contract:', quote.tx.to);
+    }
+
+    // Return successful response
     res.json({
       success: true,
       data: quote
