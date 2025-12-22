@@ -12,11 +12,11 @@ const OKX_API_PROJECT = process.env.OKX_API_PROJECT || '';
 
 /**
  * Generate OKX API signature
- * Format: timestamp + method + requestPath + body
- * For GET requests, body is empty
+ * Format: timestamp + method + requestPath + queryString + body
+ * For GET requests, body is empty but queryString is included
  */
-function generateOKXSignature(timestamp: string, method: string, requestPath: string, body: string = ''): string {
-  const message = timestamp + method + requestPath + body;
+function generateOKXSignature(timestamp: string, method: string, requestPath: string, queryString: string = '', body: string = ''): string {
+  const message = timestamp + method + requestPath + queryString + body;
   const hmac = crypto.createHmac('sha256', OKX_API_SECRET);
   return hmac.update(message).digest('base64');
 }
@@ -108,12 +108,23 @@ router.get('/quote', async (req: Request, res: Response) => {
     console.log('   User:', userWalletAddress);
 
     // Generate OKX API signature
-    // For GET requests, signature format: timestamp + method + requestPath (no query string, no body)
-    // OKX requires Unix timestamp in seconds (not milliseconds, not ISO format)
-    const timestamp = Math.floor(Date.now() / 1000).toString();
+    // OKX requires ISO timestamp format and query string in signature
+    const timestamp = new Date().toISOString();
     const method = 'GET';
     const requestPath = '/api/v5/dex/cross-chain/quote';
-    const signature = generateOKXSignature(timestamp, method, requestPath, ''); // Empty body for GET
+    
+    // Build query string for signature
+    const queryParams = new URLSearchParams({
+      fromChainId,
+      toChainId,
+      fromTokenAddress,
+      toTokenAddress,
+      amount,
+      userWalletAddress,
+      slippage
+    });
+    const queryString = '?' + queryParams.toString();
+    const signature = generateOKXSignature(timestamp, method, requestPath, queryString, '');
     
     console.log('🔐 Auth Debug:');
     console.log('   Timestamp:', timestamp);
@@ -121,8 +132,8 @@ router.get('/quote', async (req: Request, res: Response) => {
     console.log('   Secret:', OKX_API_SECRET ? 'Set' : 'Missing');
     console.log('   Passphrase:', OKX_API_PASSPHRASE ? 'Set' : 'Missing');
 
-    // Try OKX Public API first (no authentication required)
-    console.log('🔄 Testing OKX Public API (no auth)...');
+    // Try OKX API with authentication
+    console.log('🔄 Testing OKX API with authentication...');
     
     let response;
     let isOKXResponse = false;
@@ -142,11 +153,15 @@ router.get('/quote', async (req: Request, res: Response) => {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'OK-ACCESS-KEY': OKX_API_KEY,
+          'OK-ACCESS-SIGN': signature,
+          'OK-ACCESS-TIMESTAMP': timestamp,
+          'OK-ACCESS-PASSPHRASE': OKX_API_PASSPHRASE,
         },
         timeout: 30000
       });
       
-      console.log('✅ OKX Public API works! No authentication needed!');
+      console.log('✅ OKX API authentication successful!');
       isOKXResponse = true;
       
     } catch (okxError: any) {
