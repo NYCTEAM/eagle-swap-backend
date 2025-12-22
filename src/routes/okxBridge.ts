@@ -121,8 +121,8 @@ router.get('/quote', async (req: Request, res: Response) => {
     console.log('   Secret:', OKX_API_SECRET ? 'Set' : 'Missing');
     console.log('   Passphrase:', OKX_API_PASSPHRASE ? 'Set' : 'Missing');
 
-    // Try OKX API first (trading API format with PASSPHRASE)
-    console.log('🔄 Testing OKX Trading API...');
+    // Try OKX Public API first (no authentication required)
+    console.log('🔄 Testing OKX Public API (no auth)...');
     
     let response;
     let isOKXResponse = false;
@@ -142,15 +142,11 @@ router.get('/quote', async (req: Request, res: Response) => {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          'OK-ACCESS-KEY': OKX_API_KEY,
-          'OK-ACCESS-SIGN': signature,
-          'OK-ACCESS-TIMESTAMP': timestamp,
-          'OK-ACCESS-PASSPHRASE': OKX_API_PASSPHRASE,
         },
         timeout: 30000
       });
       
-      console.log('✅ OKX Trading API works!');
+      console.log('✅ OKX Public API works! No authentication needed!');
       isOKXResponse = true;
       
     } catch (okxError: any) {
