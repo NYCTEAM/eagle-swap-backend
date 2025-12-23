@@ -24,8 +24,9 @@ const CHAINS = {
   }
 };
 
-// NFT ABI
+// NFT ABI - 使用正确的函数名
 const NFT_ABI = [
+  'function signer() view returns (address)',
   'function signerAddress() view returns (address)',
   'function setSigner(address _signer) external',
   'function owner() view returns (address)'
@@ -39,15 +40,23 @@ async function updateChain(chainConfig, newSignerAddress, ownerWallet) {
   try {
     // 连接RPC
     const provider = new ethers.JsonRpcProvider(chainConfig.rpc);
-    const wallet = ownerWallet.connect(provider);
-    const nftContract = new ethers.Contract(chainConfig.nftAddress, NFT_ABI, wallet);
+    const contract = new ethers.Contract(chainConfig.nftAddress, NFT_ABI, ownerWallet);
     
     console.log('\n📋 合约信息:');
     console.log('   Address:', chainConfig.nftAddress);
     console.log('   Explorer:', `${chainConfig.explorer}/address/${chainConfig.nftAddress}`);
     
-    // 检查当前签名地址
-    const currentSigner = await nftContract.signerAddress();
+    // 读取当前签名地址 - 尝试两种函数名
+    let currentSigner;
+    try {
+      currentSigner = await contract.signer();
+    } catch (e) {
+      try {
+        currentSigner = await contract.signerAddress();
+      } catch (e2) {
+        throw new Error('无法读取签名地址，合约可能不支持 signer() 或 signerAddress() 函数');
+      }
+    }
     console.log('\n🔐 当前签名地址:');
     console.log('   ', currentSigner);
     
@@ -61,7 +70,7 @@ async function updateChain(chainConfig, newSignerAddress, ownerWallet) {
     console.log('   从:', currentSigner);
     console.log('   到:', newSignerAddress);
     
-    const tx = await nftContract.setSigner(newSignerAddress);
+    const tx = await contract.setSigner(newSignerAddress);
     console.log('\n📤 交易已发送:', tx.hash);
     console.log('   等待确认...');
     
@@ -71,8 +80,13 @@ async function updateChain(chainConfig, newSignerAddress, ownerWallet) {
     console.log('   Gas Used:', receipt.gasUsed.toString());
     console.log('   Tx:', `${chainConfig.explorer}/tx/${tx.hash}`);
     
-    // 验证更新
-    const updatedSigner = await nftContract.signerAddress();
+    // 验证更新 - 使用相同的方法读取
+    let updatedSigner;
+    try {
+      updatedSigner = await contract.signer();
+    } catch (e) {
+      updatedSigner = await contract.signerAddress();
+    }
     console.log('\n🔍 验证更新后的签名地址:');
     console.log('   ', updatedSigner);
     
