@@ -82,16 +82,19 @@ function main() {
     let insertCount = 0;
     
     for (let year = 1; year <= 10; year++) {
+      const yearMult = YEAR_MULTIPLIERS[year];
+      
       for (let level = 1; level <= 7; level++) {
         for (let stage = 1; stage <= 5; stage++) {
           const dailyReward = calculateDailyReward(level, stage, year);
           const monthlyReward = dailyReward * 30;
+          const stageMult = STAGE_MULTIPLIERS[stage];
           
           // 插入数据库
           db.prepare(`
-            INSERT INTO yearly_rewards (year, level_id, stage, daily_reward)
-            VALUES (?, ?, ?, ?)
-          `).run(year, level, stage, dailyReward);
+            INSERT INTO yearly_rewards (year, level_id, stage, daily_reward, year_multiplier, stage_multiplier)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `).run(year, level, stage, dailyReward, yearMult, stageMult);
           
           insertCount++;
           
