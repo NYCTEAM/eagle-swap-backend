@@ -6,9 +6,9 @@
 const { ethers } = require('ethers');
 require('dotenv').config();
 
-// BSC配置
-const BSC_RPC = 'https://bsc-dataseed1.binance.org';
-const BSC_NFT_ADDRESS = '0x3c117d186C5055071EfF91d87f2600eaF88D591D';
+// BSC配置 - 优先使用环境变量中的RPC
+const BSC_RPC = process.env.BSC_RPC_URL || 'https://rpc1.eagleswap.llc/bsc/';
+const BSC_NFT_ADDRESS = process.env.BSC_NFT_ADDRESS || '0x3c117d186C5055071EfF91d87f2600eaF88D591D';
 
 // NFT ABI
 const NFT_ABI = [

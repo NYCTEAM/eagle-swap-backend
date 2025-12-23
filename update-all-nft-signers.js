@@ -6,20 +6,20 @@
 const { ethers } = require('ethers');
 require('dotenv').config();
 
-// 链配置
+// 链配置 - 优先使用环境变量中的RPC
 const CHAINS = {
   XLAYER: {
     name: 'X Layer',
     chainId: 196,
-    rpc: 'https://rpc.xlayer.tech',
-    nftAddress: '0xfe016c9A9516AcB14d504aE821C46ae2bc968cd7',
+    rpc: process.env.XLAYER_RPC_URL || process.env.X_LAYER_RPC_URL || 'https://rpc1.eagleswap.llc/xlayer/',
+    nftAddress: process.env.XLAYER_NFT_ADDRESS || '0xfe016c9A9516AcB14d504aE821C46ae2bc968cd7',
     explorer: 'https://www.okx.com/web3/explorer/xlayer'
   },
   BSC: {
     name: 'BSC',
     chainId: 56,
-    rpc: 'https://bsc-dataseed1.binance.org',
-    nftAddress: '0x3c117d186C5055071EfF91d87f2600eaF88D591D',
+    rpc: process.env.BSC_RPC_URL || 'https://rpc1.eagleswap.llc/bsc/',
+    nftAddress: process.env.BSC_NFT_ADDRESS || '0x3c117d186C5055071EfF91d87f2600eaF88D591D',
     explorer: 'https://bscscan.com'
   }
 };
