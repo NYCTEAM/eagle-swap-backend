@@ -39,7 +39,12 @@ async function updateChain(chainConfig, newSignerAddress, ownerWallet) {
   try {
     // 连接RPC
     const provider = new ethers.JsonRpcProvider(chainConfig.rpc);
-    const contract = new ethers.Contract(chainConfig.nftAddress, NFT_ABI, ownerWallet);
+    
+    // 连接钱包到provider
+    const connectedWallet = ownerWallet.connect(provider);
+    
+    // 创建合约实例
+    const contract = new ethers.Contract(chainConfig.nftAddress, NFT_ABI, connectedWallet);
     
     console.log('\n📋 合约信息:');
     console.log('   Address:', chainConfig.nftAddress);
