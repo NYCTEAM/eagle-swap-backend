@@ -346,12 +346,19 @@ export class CommunityService {
    * 获取社区详细信息（包括成员NFT数据）
    */
   getCommunityDetails(communityIdOrCode: string) {
-    // 尝试通过 community_id 或 community_code 查找
+    // 尝试通过 community_id 或 community_code 查找，并关联等级配置
     let community;
     try {
       community = db.prepare(`
-        SELECT * FROM communities 
-        WHERE community_id = ? OR community_code = ? OR CAST(id AS TEXT) = ?
+        SELECT 
+          c.*,
+          COALESCE(clc.level_name, '初级社区') as level_name,
+          COALESCE(clc.member_bonus_rate, 0) as member_bonus_rate,
+          COALESCE(clc.leader_bonus_rate, 10) as leader_bonus_rate,
+          c.total_node_value as total_value
+        FROM communities c
+        LEFT JOIN community_level_config clc ON c.community_level = clc.level
+        WHERE c.community_id = ? OR c.community_code = ? OR CAST(c.id AS TEXT) = ?
       `).get(communityIdOrCode, communityIdOrCode, communityIdOrCode);
       
       if (!community) {
