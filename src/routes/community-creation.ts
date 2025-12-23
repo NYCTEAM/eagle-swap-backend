@@ -142,11 +142,11 @@ router.post('/create-request', async (req: Request, res: Response) => {
         ) VALUES (?, ?, ?, ?, 1, 1, 0, 'active')
       `).run(communityId, communityName, communityCode, creatorAddress);
 
-      // 将创建者加入社区作为社区长
+      // 将创建者加入社区作为社区长（使用 communityId 而不是 lastInsertRowid）
       db.prepare(`
         INSERT INTO community_members (community_id, member_address, is_leader, joined_at)
         VALUES (?, ?, 1, datetime('now'))
-      `).run(communityResult.lastInsertRowid, creatorAddress);
+      `).run(communityId, creatorAddress);
 
       console.log(`✅ 社区 "${communityName}" 由NFT持有者直接创建成功 (ID: ${communityId})`);
     }
@@ -284,11 +284,11 @@ router.post('/vote', async (req: Request, res: Response) => {
         ) VALUES (?, ?, ?, ?, 1, 1, 0, 'active')
       `).run(communityId, updatedReq.community_name, updatedReq.community_code, updatedReq.creator_address);
 
-      // 将创建者加入社区作为社区长
+      // 将创建者加入社区作为社区长（使用 communityId 而不是 lastInsertRowid）
       db.prepare(`
         INSERT INTO community_members (community_id, member_address, is_leader, joined_at)
         VALUES (?, ?, 1, datetime('now'))
-      `).run(communityResult.lastInsertRowid, updatedReq.creator_address);
+      `).run(communityId, updatedReq.creator_address);
 
       console.log(`✅ 社区 "${updatedReq.community_name}" 投票通过，已自动创建 (ID: ${communityId})`);
     }
