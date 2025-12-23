@@ -17,14 +17,14 @@ const CHAIN_CONFIGS: ChainConfig[] = [
     chainName: 'X Layer',
     rpcUrl: process.env.XLAYER_RPC_URL || 'https://rpc1.eagleswap.llc/xlayer/',
     nftAddress: process.env.XLAYER_NFT_ADDRESS || '0xfe016c9A9516AcB14d504aE821C46ae2bc968cd7', // Multi-Chain Global
-    startBlock: 0
+    startBlock: 47700000 // NFT合约部署区块（大约）
   },
   {
     chainId: 56,
     chainName: 'BSC',
     rpcUrl: process.env.BSC_RPC_URL || 'https://rpc1.eagleswap.llc/bsc/',
     nftAddress: process.env.BSC_NFT_ADDRESS || '0x3c117d186C5055071EfF91d87f2600eaF88D591D', // Multi-Chain Global (Auto-decimals)
-    startBlock: 0
+    startBlock: 44000000 // NFT合约部署区块（大约）
   }
 ];
 
