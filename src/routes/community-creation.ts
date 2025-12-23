@@ -432,7 +432,83 @@ router.get('/request/:id', async (req: Request, res: Response) => {
 });
 
 // ============================================
-// 6. 检查用户是否可以创建社区
+// 6. 检查社区名称是否已存在
+// ============================================
+router.get('/check-name', async (req: Request, res: Response) => {
+  const { name } = req.query;
+
+  if (!name) {
+    return res.status(400).json({
+      success: false,
+      error: 'Name is required'
+    });
+  }
+
+  const db = getDb();
+
+  try {
+    const existing = db.prepare(`
+      SELECT 1 FROM communities WHERE LOWER(community_name) = LOWER(?)
+      UNION
+      SELECT 1 FROM community_creation_requests WHERE LOWER(community_name) = LOWER(?) AND status = 'pending'
+    `).get(name, name);
+
+    db.close();
+
+    res.json({
+      success: true,
+      exists: !!existing
+    });
+  } catch (error: any) {
+    db.close();
+    console.error('Check name error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ============================================
+// 7. 检查社区代码是否已存在
+// ============================================
+router.get('/check-code', async (req: Request, res: Response) => {
+  const { code } = req.query;
+
+  if (!code) {
+    return res.status(400).json({
+      success: false,
+      error: 'Code is required'
+    });
+  }
+
+  const db = getDb();
+
+  try {
+    const existing = db.prepare(`
+      SELECT 1 FROM communities WHERE LOWER(community_code) = LOWER(?)
+      UNION
+      SELECT 1 FROM community_creation_requests WHERE LOWER(community_code) = LOWER(?) AND status = 'pending'
+    `).get(code, code);
+
+    db.close();
+
+    res.json({
+      success: true,
+      exists: !!existing
+    });
+  } catch (error: any) {
+    db.close();
+    console.error('Check code error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ============================================
+// 8. 检查用户是否可以创建社区
 // ============================================
 router.get('/can-create/:address', async (req: Request, res: Response) => {
   const { address } = req.params;
