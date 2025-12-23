@@ -248,6 +248,26 @@ router.get('/user/:address', async (req, res) => {
 });
 
 /**
+ * GET /api/community/details/:communityId
+ * 获取社区详细信息（包括成员列表）
+ */
+router.get('/details/:communityId', async (req, res) => {
+  try {
+    const { communityId } = req.params;
+    
+    const result = communityService.getCommunityDetails(communityId);
+    
+    res.json(result);
+  } catch (error: any) {
+    console.error('Error fetching community details:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch community details',
+    });
+  }
+});
+
+/**
  * POST /api/community/impeachment/initiate
  * 发起弹劾投票
  */

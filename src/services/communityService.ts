@@ -343,6 +343,64 @@ export class CommunityService {
   }
   
   /**
+   * 获取社区详细信息（包括成员NFT数据）
+   */
+  getCommunityDetails(communityIdOrCode: string) {
+    // 尝试通过 community_id 或 community_code 查找
+    let community;
+    try {
+      community = db.prepare(`
+        SELECT * FROM communities 
+        WHERE community_id = ? OR community_code = ? OR CAST(id AS TEXT) = ?
+      `).get(communityIdOrCode, communityIdOrCode, communityIdOrCode);
+      
+      if (!community) {
+        return {
+          success: false,
+          error: '社区不存在'
+        };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: '社区不存在'
+      };
+    }
+    
+    // 获取成员列表及其NFT信息
+    let members = [];
+    try {
+      members = db.prepare(`
+        SELECT 
+          cm.member_address,
+          cm.is_leader,
+          cm.joined_at,
+          cm.node_value,
+          COUNT(nh.global_token_id) as nft_count,
+          COALESCE(SUM(nls.price_usdt), 0) as total_nft_value
+        FROM community_members cm
+        LEFT JOIN nft_holders nh ON LOWER(cm.member_address) = LOWER(nh.owner_address)
+        LEFT JOIN nft_level_stats nls ON nh.level = nls.level
+        WHERE cm.community_id = ?
+        GROUP BY cm.member_address, cm.is_leader, cm.joined_at, cm.node_value
+        ORDER BY cm.is_leader DESC, total_nft_value DESC
+      `).all(community.community_id);
+    } catch (error) {
+      console.error('Error fetching members:', error);
+      members = [];
+    }
+    
+    return {
+      success: true,
+      data: {
+        community,
+        members,
+        total_members: members.length
+      }
+    };
+  }
+  
+  /**
    * 获取用户的社区
    */
   getUserCommunity(userAddress: string) {
