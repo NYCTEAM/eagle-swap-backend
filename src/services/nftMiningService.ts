@@ -151,11 +151,15 @@ export class NFTMiningService {
       // 从数据库获取每日奖励（已包含年度和阶段衰减）
       const dailyReward = this.getDailyReward(level, stage, currentYear);
       
-      // 计算持有时间 (从上次领取或 NFT 创建时间开始)
-      const nftCreatedAt = nft.minted_at 
-        ? new Date(nft.minted_at * 1000) // minted_at 是 Unix 时间戳
-        : new Date(nft.created_at);
-      const startTime = lastClaimTime || nftCreatedAt;
+      // 计算持有时间 (从上次领取或 NFT 铸造时间开始)
+      // 必须使用 minted_at (链上铸造时间)，不能使用 created_at (数据库记录时间)
+      if (!nft.minted_at) {
+        console.warn(`⚠️ NFT ${nft.global_token_id} 缺少 minted_at，跳过奖励计算`);
+        continue;
+      }
+      
+      const nftMintedAt = new Date(nft.minted_at * 1000); // minted_at 是 Unix 时间戳
+      const startTime = lastClaimTime || nftMintedAt;
       const startTimeMs = startTime instanceof Date ? startTime.getTime() : startTime;
       const daysHeld = Math.max(0, (now.getTime() - startTimeMs) / (1000 * 60 * 60 * 24));
       
