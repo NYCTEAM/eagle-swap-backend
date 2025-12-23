@@ -256,46 +256,58 @@ class ChainSync {
     try {
       const { to, localTokenId, globalTokenId, level, weight, paymentMethod } = event.args;
       const block = await event.getBlock();
+      
+      // weight 是整数，不是 18 decimals
+      const weightValue = Number(weight);
+      const now = new Date().toISOString();
 
       db.prepare(`
         INSERT OR REPLACE INTO nft_holders 
-        (chain_id, chain_name, contract_address, token_id, global_token_id, 
-         owner_address, level, weight, minted_at, payment_method)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (global_token_id, chain_id, chain_name, contract_address, 
+         owner_address, level, weight, effective_weight, stage, minted_at, 
+         tx_hash, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
       `).run(
+        Number(globalTokenId),
         this.config.chainId,
         this.config.chainName,
         this.config.nftAddress.toLowerCase(),
-        localTokenId.toString(),
-        globalTokenId.toString(),
         to.toLowerCase(),
-        level,
-        parseFloat(ethers.formatUnits(weight, 18)), // weight 是 18 decimals
+        Number(level),
+        weightValue,
+        weightValue,
         block.timestamp,
-        paymentMethod
+        event.transactionHash || '0x0000000000000000000000000000000000000000000000000000000000000000',
+        now,
+        now
       );
 
-      console.log(`✅ ${this.config.chainName}: Saved NFT #${localTokenId} (Global: ${globalTokenId}) for ${to}`);
+      console.log(`✅ ${this.config.chainName}: Saved NFT Global #${globalTokenId} (Level ${level}) for ${to}`);
     } catch (error) {
       console.error(`❌ ${this.config.chainName}: Failed to handle mint event:`, error);
     }
   }
 
   // 处理转移事件 - 更新 nft_holders 表
-  private async handleTransferEvent(from: string, to: string, tokenId: bigint) {
+  private async handleTransferEvent(from: string, to: string, localTokenId: bigint) {
     try {
+      // 需要从合约获取 globalTokenId
+      const nftData = await this.contract.nftData(localTokenId);
+      const globalTokenId = Number(nftData.globalTokenId);
+      const now = new Date().toISOString();
+
       db.prepare(`
         UPDATE nft_holders 
         SET owner_address = ?, updated_at = ?
-        WHERE chain_id = ? AND token_id = ?
+        WHERE chain_id = ? AND global_token_id = ?
       `).run(
         to.toLowerCase(),
-        Math.floor(Date.now() / 1000),
+        now,
         this.config.chainId,
-        tokenId.toString()
+        globalTokenId
       );
 
-      console.log(`✅ ${this.config.chainName}: Updated owner for NFT #${tokenId}`);
+      console.log(`✅ ${this.config.chainName}: Updated owner for NFT Global #${globalTokenId}`);
     } catch (error) {
       console.error(`❌ ${this.config.chainName}: Failed to handle transfer event:`, error);
     }
