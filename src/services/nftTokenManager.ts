@@ -10,37 +10,61 @@ export class NFTTokenManager {
   private static readonly RESERVATION_DURATION = 1800; // 30分钟
 
   /**
-   * 获取下一个可用的全局 Token ID
+   * Token ID 范围配置 - 按等级分段
+   * Level 1: 1-5000 (5000个)
+   * Level 2: 5001-8000 (3000个)
+   * Level 3: 8001-10000 (2000个)
+   * Level 4: 10001-11500 (1500个)
+   * Level 5: 11501-12600 (1100个)
+   * Level 6: 12601-13300 (700个)
+   * Level 7: 13301-13900 (600个)
    */
-  static getNextAvailableTokenId(): number {
-    const stats = db.prepare('SELECT last_token_id FROM nft_global_stats WHERE id = 1').get() as any;
+  private static readonly LEVEL_RANGES: Record<number, { start: number; end: number; max: number }> = {
+    1: { start: 1, end: 5000, max: 5000 },
+    2: { start: 5001, end: 8000, max: 3000 },
+    3: { start: 8001, end: 10000, max: 2000 },
+    4: { start: 10001, end: 11500, max: 1500 },
+    5: { start: 11501, end: 12600, max: 1100 },
+    6: { start: 12601, end: 13300, max: 700 },
+    7: { start: 13301, end: 13900, max: 600 }
+  };
+
+  /**
+   * 获取指定等级的下一个可用 Token ID
+   */
+  static getNextAvailableTokenId(level: number): number {
+    const range = this.LEVEL_RANGES[level];
     
-    if (!stats) {
-      throw new Error('Global stats not initialized');
+    if (!range) {
+      throw new Error(`Invalid level: ${level}`);
     }
 
-    let nextId = stats.last_token_id + 1;
+    // 检查该等级是否还有可用供应
+    const levelStats = db.prepare(`
+      SELECT minted, total_supply FROM nft_level_stats WHERE level = ?
+    `).get(level) as any;
 
-    // 检查是否超过最大值
-    if (nextId > this.MAX_TOKEN_ID) {
-      throw new Error('All NFTs have been minted (13900/13900)');
+    if (!levelStats) {
+      throw new Error(`Level ${level} stats not found`);
     }
 
-    // 检查该 ID 是否已被使用或预留
-    while (nextId <= this.MAX_TOKEN_ID) {
+    if (levelStats.minted >= levelStats.total_supply) {
+      throw new Error(`Level ${level} is sold out (${levelStats.minted}/${levelStats.total_supply})`);
+    }
+
+    // 从该等级的起始ID开始查找可用ID
+    for (let tokenId = range.start; tokenId <= range.end; tokenId++) {
       const existing = db.prepare(`
         SELECT global_token_id FROM nft_global_token_allocation 
         WHERE global_token_id = ?
-      `).get(nextId);
+      `).get(tokenId);
 
       if (!existing) {
-        return nextId;
+        return tokenId;
       }
-
-      nextId++;
     }
 
-    throw new Error('No available Token IDs');
+    throw new Error(`No available Token IDs for level ${level}`);
   }
 
   /**
@@ -336,5 +360,31 @@ export class NFTTokenManager {
     `).get(level) as any;
 
     return stats && stats.available > 0;
+  }
+
+  /**
+   * 根据 Token ID 获取等级
+   */
+  static getLevelByTokenId(tokenId: number): number | null {
+    for (const [level, range] of Object.entries(this.LEVEL_RANGES)) {
+      if (tokenId >= range.start && tokenId <= range.end) {
+        return parseInt(level);
+      }
+    }
+    return null;
+  }
+
+  /**
+   * 获取等级的 Token ID 范围
+   */
+  static getLevelRange(level: number): { start: number; end: number; max: number } | null {
+    return this.LEVEL_RANGES[level] || null;
+  }
+
+  /**
+   * 获取所有等级的 Token ID 范围配置
+   */
+  static getAllLevelRanges(): Record<number, { start: number; end: number; max: number }> {
+    return this.LEVEL_RANGES;
   }
 }

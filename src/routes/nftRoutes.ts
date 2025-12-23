@@ -377,8 +377,8 @@ router.post('/request-mint', async (req, res) => {
     // 清理过期的预留
     NFTTokenManager.cleanExpiredReservations();
 
-    // 获取下一个可用的全局 Token ID
-    const globalTokenId = NFTTokenManager.getNextAvailableTokenId();
+    // 获取下一个可用的全局 Token ID (按等级分配)
+    const globalTokenId = NFTTokenManager.getNextAvailableTokenId(level);
 
     // 获取当前总铸造数量（用于计算阶段）
     const totalMinted = NFTTokenManager.getTotalMinted();
