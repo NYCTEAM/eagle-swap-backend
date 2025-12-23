@@ -99,9 +99,9 @@ router.get('/levels/:level', (req, res) => {
  * 获取用户拥有的 NFT
  * GET /api/nft/user/:address
  * 
- * 🔄 已更新：现在从简化NFT同步服务读取实时数据
+ * 🔄 已更新：现在从简化NFT同步服务读取实时数据，并包含挖矿奖励
  */
-router.get('/user/:address', (req, res) => {
+router.get('/user/:address', async (req, res) => {
   try {
     const { address } = req.params;
     
@@ -126,6 +126,10 @@ router.get('/user/:address', (req, res) => {
       console.error('Error reading from nft_holders, falling back to simpleNftSync:', e);
       userNFTs = simpleNftSync.getUserNFTs(address);
     }
+    
+    // 获取挖矿奖励数据
+    const { nftMiningService } = await import('../services/nftMiningService');
+    const miningStats = await nftMiningService.getUserStats(address);
     
     // 转换为前端期望的格式（兼容旧API）
     // weight 在数据库中存储为整数 (1 = 0.1x, 10 = 1.0x, 1000 = 100x 或者直接是 1000 = 1.0x)
@@ -153,8 +157,8 @@ router.get('/user/:address', (req, res) => {
         power: displayWeight, // 兼容前端字段名
         stage: nft.stage || 1,
         difficulty_multiplier: 1.0, // 默认值，稍后可以从 stage 计算
-        total_earned: 0, // 暂时为 0
-        pending_rewards: 0, // 暂时为 0
+        total_earned: miningStats.totalClaimed, // 从挖矿服务获取
+        pending_rewards: miningStats.pendingReward / userNFTs.length, // 平均分配到每个NFT
         minted_at: nft.minted_at,
         payment_method: nft.payment_method || 'USDT',
         purchase_time: new Date((nft.minted_at || 0) * 1000).toISOString(),
@@ -174,7 +178,9 @@ router.get('/user/:address', (req, res) => {
       data: {
         nfts,
         total_count: nfts.length,
-        total_weight: totalWeight
+        total_weight: totalWeight,
+        total_claimed: miningStats.totalClaimed,
+        pending_reward: miningStats.pendingReward
       }
     });
   } catch (error: any) {
