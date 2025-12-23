@@ -37,33 +37,11 @@ class MultiChainNFTSync {
     this.initChainSyncs();
   }
 
-  // 初始化数据库表
+  // 初始化数据库表 - 使用 nft_holders 表
   private initDatabase() {
-    // 添加 chain_id 字段到 user_nfts 表
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS user_nfts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        chain_id INTEGER NOT NULL,
-        token_id INTEGER NOT NULL,
-        owner_address TEXT NOT NULL,
-        level INTEGER NOT NULL,
-        weight REAL NOT NULL,
-        minted_at DATETIME NOT NULL,
-        payment_method TEXT,
-        is_listed INTEGER DEFAULT 0,
-        listing_price REAL DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(chain_id, token_id)
-      )
-    `);
-
-    // 尝试添加 chain_id 字段（如果表已存在）
-    try {
-      db.exec(`ALTER TABLE user_nfts ADD COLUMN chain_id INTEGER DEFAULT 196`);
-      console.log('✅ Added chain_id column to user_nfts table');
-    } catch (e) {
-      // 字段已存在，忽略
-    }
+    // nft_holders 表应该已经由数据库初始化脚本创建
+    // 这里只需要确保表存在即可
+    console.log('✅ Using existing nft_holders table for multi-chain sync');
 
     // NFT库存表
     db.exec(`
@@ -129,11 +107,11 @@ class MultiChainNFTSync {
     }
   }
 
-  // 获取指定链的NFT列表
+  // 获取指定链的NFT列表 - 使用 nft_holders 表
   getUserNFTs(userAddress: string, chainId?: number) {
     const query = chainId
-      ? 'SELECT * FROM user_nfts WHERE owner_address = ? AND chain_id = ? ORDER BY token_id DESC'
-      : 'SELECT * FROM user_nfts WHERE owner_address = ? ORDER BY chain_id, token_id DESC';
+      ? 'SELECT * FROM nft_holders WHERE owner_address = ? AND chain_id = ? ORDER BY global_token_id DESC'
+      : 'SELECT * FROM nft_holders WHERE owner_address = ? ORDER BY chain_id, global_token_id DESC';
     
     const params = chainId ? [userAddress.toLowerCase(), chainId] : [userAddress.toLowerCase()];
     return db.prepare(query).all(...params);
@@ -167,11 +145,12 @@ class ChainSync {
     this.config = config;
     this.provider = new ethers.JsonRpcProvider(config.rpcUrl);
 
-    // NFT合约ABI
+    // NFT合约ABI - 包含 globalTokenId
     const nftABI = [
-      "event NFTMinted(address indexed to, uint256 indexed tokenId, uint8 level, uint256 weight, string paymentMethod)",
+      "event NFTMinted(address indexed to, uint256 indexed localTokenId, uint256 indexed globalTokenId, uint8 level, uint256 weight, string paymentMethod)",
       "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)",
       "function ownerOf(uint256 tokenId) view returns (address)",
+      "function nftData(uint256 tokenId) view returns (uint8 level, uint256 mintedAt, uint256 globalTokenId)",
       "function tokenURI(uint256 tokenId) view returns (string)"
     ];
 
@@ -257,9 +236,9 @@ class ChainSync {
 
   // 监听新事件
   private listenToEvents() {
-    // 监听 NFTMinted 事件
-    this.contract.on('NFTMinted', async (to, tokenId, level, weight, paymentMethod, event) => {
-      console.log(`🎉 ${this.config.chainName}: New NFT minted - Token #${tokenId} to ${to}`);
+    // 监听 NFTMinted 事件 - 包含 globalTokenId
+    this.contract.on('NFTMinted', async (to, localTokenId, globalTokenId, level, weight, paymentMethod, event) => {
+      console.log(`🎉 ${this.config.chainName}: New NFT minted - Token #${localTokenId} (Global: ${globalTokenId}) to ${to}`);
       await this.handleMintEvent(event);
     });
 
@@ -272,40 +251,49 @@ class ChainSync {
     });
   }
 
-  // 处理铸造事件
+  // 处理铸造事件 - 保存到 nft_holders 表
   private async handleMintEvent(event: any) {
     try {
-      const { to, tokenId, level, weight, paymentMethod } = event.args;
+      const { to, localTokenId, globalTokenId, level, weight, paymentMethod } = event.args;
       const block = await event.getBlock();
 
       db.prepare(`
-        INSERT OR REPLACE INTO user_nfts 
-        (chain_id, token_id, owner_address, level, weight, minted_at, payment_method)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO nft_holders 
+        (chain_id, chain_name, contract_address, token_id, global_token_id, 
+         owner_address, level, weight, minted_at, payment_method)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         this.config.chainId,
-        tokenId.toString(),
+        this.config.chainName,
+        this.config.nftAddress.toLowerCase(),
+        localTokenId.toString(),
+        globalTokenId.toString(),
         to.toLowerCase(),
         level,
-        ethers.formatUnits(weight, 0),
-        new Date(block.timestamp * 1000).toISOString(),
+        parseFloat(ethers.formatUnits(weight, 18)), // weight 是 18 decimals
+        block.timestamp,
         paymentMethod
       );
 
-      console.log(`✅ ${this.config.chainName}: Saved NFT #${tokenId} for ${to}`);
+      console.log(`✅ ${this.config.chainName}: Saved NFT #${localTokenId} (Global: ${globalTokenId}) for ${to}`);
     } catch (error) {
       console.error(`❌ ${this.config.chainName}: Failed to handle mint event:`, error);
     }
   }
 
-  // 处理转移事件
+  // 处理转移事件 - 更新 nft_holders 表
   private async handleTransferEvent(from: string, to: string, tokenId: bigint) {
     try {
       db.prepare(`
-        UPDATE user_nfts 
-        SET owner_address = ?
+        UPDATE nft_holders 
+        SET owner_address = ?, updated_at = ?
         WHERE chain_id = ? AND token_id = ?
-      `).run(to.toLowerCase(), this.config.chainId, tokenId.toString());
+      `).run(
+        to.toLowerCase(),
+        Math.floor(Date.now() / 1000),
+        this.config.chainId,
+        tokenId.toString()
+      );
 
       console.log(`✅ ${this.config.chainName}: Updated owner for NFT #${tokenId}`);
     } catch (error) {
