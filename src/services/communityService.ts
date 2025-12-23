@@ -384,7 +384,7 @@ export class CommunityService {
           cm.joined_at,
           cm.node_value,
           COUNT(nh.global_token_id) as nft_count,
-          COALESCE(SUM(nls.price_usdt), 0) as total_nft_value
+          COALESCE(SUM(nls.price_usdt), 0) / 1000000.0 as total_nft_value
         FROM community_members cm
         LEFT JOIN nft_holders nh ON LOWER(cm.member_address) = LOWER(nh.owner_address)
         LEFT JOIN nft_level_stats nls ON nh.level = nls.level
