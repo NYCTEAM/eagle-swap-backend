@@ -121,16 +121,47 @@ router.post('/create-request', async (req: Request, res: Response) => {
       ) VALUES (?, ?, ?, ?, ?, ?)
     `).run(creatorAddress, communityName, communityCode, description, logoUrl, creationType);
 
+    const requestId = result.lastInsertRowid;
+
+    // 如果是 NFT 持有者直接创建，立即创建社区
+    if (creationType === 'nft_holder') {
+      // 生成唯一的 community_id
+      const communityId = `COMM-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
+      // 更新申请状态为 approved
+      db.prepare(`
+        UPDATE community_creation_requests 
+        SET status = 'approved', approved_at = datetime('now'), completed_at = datetime('now')
+        WHERE id = ?
+      `).run(requestId);
+
+      // 创建社区
+      const communityResult = db.prepare(`
+        INSERT INTO communities (
+          community_id, community_name, community_code, leader_address, total_members, community_level, total_node_value, status
+        ) VALUES (?, ?, ?, ?, 1, 1, 0, 'active')
+      `).run(communityId, communityName, communityCode, creatorAddress);
+
+      // 将创建者加入社区作为社区长
+      db.prepare(`
+        INSERT INTO community_members (community_id, member_address, is_leader, joined_at)
+        VALUES (?, ?, 1, datetime('now'))
+      `).run(communityResult.lastInsertRowid, creatorAddress);
+
+      console.log(`✅ 社区 "${communityName}" 由NFT持有者直接创建成功 (ID: ${communityId})`);
+    }
+
     // 获取创建的申请详情
     const request = db.prepare(`
       SELECT * FROM community_creation_requests_view WHERE id = ?
-    `).get(result.lastInsertRowid);
+    `).get(requestId);
 
     db.close();
 
     res.json({
       success: true,
-      data: request
+      data: request,
+      message: creationType === 'nft_holder' ? 'Community created successfully!' : 'Request created successfully!'
     });
   } catch (error: any) {
     db.close();
@@ -236,6 +267,9 @@ router.post('/vote', async (req: Request, res: Response) => {
     `).get(requestId) as any;
 
     if (updatedReq && updatedReq.current_votes >= updatedReq.required_votes) {
+      // 生成唯一的 community_id
+      const communityId = `COMM-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      
       // 更新申请状态为 approved
       db.prepare(`
         UPDATE community_creation_requests 
@@ -246,9 +280,9 @@ router.post('/vote', async (req: Request, res: Response) => {
       // 创建社区
       const communityResult = db.prepare(`
         INSERT INTO communities (
-          community_name, community_code, leader_address, total_members, community_level, total_node_value, status
-        ) VALUES (?, ?, ?, 1, 1, 0, 'active')
-      `).run(updatedReq.community_name, updatedReq.community_code, updatedReq.creator_address);
+          community_id, community_name, community_code, leader_address, total_members, community_level, total_node_value, status
+        ) VALUES (?, ?, ?, ?, 1, 1, 0, 'active')
+      `).run(communityId, updatedReq.community_name, updatedReq.community_code, updatedReq.creator_address);
 
       // 将创建者加入社区作为社区长
       db.prepare(`
@@ -256,7 +290,7 @@ router.post('/vote', async (req: Request, res: Response) => {
         VALUES (?, ?, 1, datetime('now'))
       `).run(communityResult.lastInsertRowid, updatedReq.creator_address);
 
-      console.log(`✅ 社区 "${updatedReq.community_name}" 投票通过，已自动创建`);
+      console.log(`✅ 社区 "${updatedReq.community_name}" 投票通过，已自动创建 (ID: ${communityId})`);
     }
 
     // 获取更新后的申请详情
