@@ -160,7 +160,7 @@ INSERT OR IGNORE INTO news_sources (id, name, type, url, icon) VALUES
           summary: summary,
           url: item.link,
           image_url: imageUrl,
-          author: item.creator || item.author || source.name,
+          author: item.creator || (item as any).author || source.name,
           published_at: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
           category: this.categorizeArticle(item.title || '')
         });

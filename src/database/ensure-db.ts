@@ -3,7 +3,7 @@ import Database from 'better-sqlite3';
 import * as path from 'path';
 import * as fs from 'fs';
 
-export function ensureDatabase() {
+export function ensureDatabase(): Database.Database {
   const dbPath = path.join(__dirname, 'eagle-swap.db');
   console.log('🔍 [DB Check] Checking database at:', dbPath);
 
