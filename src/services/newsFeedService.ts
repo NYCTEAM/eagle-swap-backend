@@ -197,7 +197,7 @@ INSERT OR IGNORE INTO news_sources (id, name, type, url, icon) VALUES
       }
       
       // 更新最后采集时间
-      db.prepare('UPDATE news_sources SET last_fetch_at = datetime("now") WHERE id = ?').run(source.id);
+      db.prepare("UPDATE news_sources SET last_fetch_at = datetime('now') WHERE id = ?").run(source.id);
       
       return articles.length;
     } catch (error) {
