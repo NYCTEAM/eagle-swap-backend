@@ -225,7 +225,7 @@ INSERT OR IGNORE INTO news_sources (id, name, type, url, icon) VALUES
    * 采集所有RSS源
    */
   async fetchAllRSS() {
-    const sources = db.prepare('SELECT * FROM news_sources WHERE enabled = 1 AND type = "rss"').all();
+    const sources = db.prepare("SELECT * FROM news_sources WHERE enabled = 1 AND type = 'rss'").all();
     
     let totalArticles = 0;
     for (const source of sources) {
