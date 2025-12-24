@@ -262,6 +262,21 @@ INSERT OR IGNORE INTO news_sources (id, name, type, url, icon) VALUES
   }
 
   /**
+   * 根据ID获取文章详情
+   */
+  getArticleById(id: number) {
+    return db.prepare(`
+      SELECT 
+        na.*,
+        ns.name as source_name,
+        ns.icon as source_icon
+      FROM news_articles na
+      JOIN news_sources ns ON na.source_id = ns.id
+      WHERE na.id = ?
+    `).get(id);
+  }
+
+  /**
    * 获取Twitter推文（模拟数据，实际需要Twitter API）
    */
   getLatestTweets(username: string = 'cz_binance', limit: number = 10) {

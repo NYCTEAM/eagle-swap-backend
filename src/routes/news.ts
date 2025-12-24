@@ -29,6 +29,36 @@ router.get('/latest', async (req, res) => {
 });
 
 /**
+ * GET /api/news/article/:id
+ * 获取单篇文章详情
+ */
+router.get('/article/:id', async (req, res) => {
+  try {
+    const articleId = parseInt(req.params.id);
+    
+    const article = newsFeedService.getArticleById(articleId);
+    
+    if (!article) {
+      return res.status(404).json({
+        success: false,
+        error: 'Article not found'
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: article
+    });
+  } catch (error) {
+    console.error('Error fetching article:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch article'
+    });
+  }
+});
+
+/**
  * GET /api/news/tweets
  * 获取Twitter推文
  */
