@@ -3,6 +3,7 @@ import { app, initializeApp } from './app';
 import { logger } from './utils/logger';
 import { startDailySettlement } from './services/dailySettlement';
 import { startOTCSync } from './services/otcSync';
+import newsFeedService from './services/newsFeedService';
 // 图表功能已移除 - 不需要价格收集服务
 // import { priceCollector } from './services/priceCollector';
 // import { hotPairsMonitor } from './services/hotPairsMonitor';
@@ -23,6 +24,32 @@ const startServer = async () => {
 
     // Start OTC event sync service
     startOTCSync();
+
+    // Initialize news feed database
+    try {
+      newsFeedService.initDatabase();
+      logger.info('News feed database initialized');
+      
+      // Fetch news on startup
+      newsFeedService.fetchAllRSS().then(count => {
+        logger.info(`Initial news fetch completed: ${count} articles`);
+      }).catch(err => {
+        logger.error('Failed to fetch initial news', { error: err });
+      });
+      
+      // Auto-fetch news every hour
+      setInterval(() => {
+        newsFeedService.fetchAllRSS().then(count => {
+          logger.info(`Hourly news fetch completed: ${count} articles`);
+        }).catch(err => {
+          logger.error('Failed to fetch news', { error: err });
+        });
+      }, 60 * 60 * 1000); // 每小时
+      
+      logger.info('News feed auto-sync started (every 1 hour)');
+    } catch (error) {
+      logger.error('Failed to initialize news feed service', { error });
+    }
 
     // 图表功能已移除 - 禁用价格收集服务
     // Start price collector for X Layer chart data
