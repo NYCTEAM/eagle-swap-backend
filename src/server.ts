@@ -37,16 +37,16 @@ const startServer = async () => {
         logger.error('Failed to fetch initial news', { error: err });
       });
       
-      // Auto-fetch news every hour
+      // Auto-fetch news every 5 minutes
       setInterval(() => {
         newsFeedService.fetchAllRSS().then(count => {
-          logger.info(`Hourly news fetch completed: ${count} articles`);
+          logger.info(`Auto news fetch completed: ${count} articles`);
         }).catch(err => {
           logger.error('Failed to fetch news', { error: err });
         });
-      }, 60 * 60 * 1000); // 每小时
+      }, 5 * 60 * 1000); // 每5分钟
       
-      logger.info('News feed auto-sync started (every 1 hour)');
+      logger.info('News feed auto-sync started (every 5 minutes)');
     } catch (error) {
       logger.error('Failed to initialize news feed service', { error });
     }
