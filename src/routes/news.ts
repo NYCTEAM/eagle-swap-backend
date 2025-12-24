@@ -30,19 +30,26 @@ router.get('/latest', async (req, res) => {
 
 /**
  * GET /api/news/article/:id
- * 获取单篇文章详情
+ * 获取单篇文章详情（自动爬取完整内容）
  */
 router.get('/article/:id', async (req, res) => {
   try {
     const articleId = parseInt(req.params.id);
     
-    const article = newsFeedService.getArticleById(articleId);
+    let article: any = newsFeedService.getArticleById(articleId);
     
     if (!article) {
       return res.status(404).json({
         success: false,
         error: 'Article not found'
       });
+    }
+    
+    // 如果内容较短，尝试爬取完整内容
+    if (!article.content || article.content.length < 500) {
+      await newsFeedService.updateArticleContent(articleId);
+      // 重新获取更新后的文章
+      article = newsFeedService.getArticleById(articleId);
     }
     
     res.json({

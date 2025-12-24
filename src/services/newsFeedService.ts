@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import Parser from 'rss-parser';
 import axios from 'axios';
+import * as cheerio from 'cheerio';
 
 const db = new Database(path.join(__dirname, '../../data/eagleswap.db'));
 const rssParser = new Parser({
@@ -286,6 +287,70 @@ INSERT OR IGNORE INTO news_sources (id, name, type, url, icon) VALUES
       ORDER BY published_at DESC 
       LIMIT ?
     `).all(username, limit);
+  }
+
+  /**
+   * 爬取网页完整内容
+   */
+  async scrapeFullArticle(url: string): Promise<string> {
+    try {
+      const response = await axios.get(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        timeout: 10000
+      });
+      
+      const $ = cheerio.load(response.data);
+      
+      // 移除不需要的元素
+      $('script, style, nav, header, footer, aside, .advertisement, .ad, .social-share').remove();
+      
+      // 根据不同网站提取内容
+      let content = '';
+      
+      if (url.includes('coindesk.com')) {
+        content = $('.article-body, .at-content-body, .entry-content').html() || '';
+      } else if (url.includes('cointelegraph.com')) {
+        content = $('.post-content, .post__content').html() || '';
+      } else if (url.includes('cryptoslate.com')) {
+        content = $('.post-content, .entry-content').html() || '';
+      } else if (url.includes('theblock.co')) {
+        content = $('.article-content, .post-content').html() || '';
+      } else if (url.includes('decrypt.co')) {
+        content = $('.post-content, article').html() || '';
+      } else {
+        // 通用提取
+        content = $('article, .article, .post-content, .entry-content, main').first().html() || '';
+      }
+      
+      return content || '无法提取完整内容';
+    } catch (error) {
+      console.error(`Failed to scrape ${url}:`, error);
+      return '无法提取完整内容';
+    }
+  }
+
+  /**
+   * 更新文章的完整内容
+   */
+  async updateArticleContent(articleId: number) {
+    const article: any = db.prepare('SELECT url, content FROM news_articles WHERE id = ?').get(articleId);
+    
+    if (!article) {
+      return { success: false, message: 'Article not found' };
+    }
+    
+    // 如果已有较长内容，不重复爬取
+    if (article.content && article.content.length > 500) {
+      return { success: true, message: 'Content already exists', cached: true };
+    }
+    
+    const fullContent = await this.scrapeFullArticle(article.url);
+    
+    db.prepare('UPDATE news_articles SET content = ? WHERE id = ?').run(fullContent, articleId);
+    
+    return { success: true, message: 'Content updated', cached: false };
   }
 
   /**
