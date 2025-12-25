@@ -24,10 +24,17 @@ try {
     console.log('✅ data 目录已存在');
   }
 
-  // 如果存在预置的 Cookie 文件，复制到 data 目录
-  const presetCookiePath = path.join(__dirname, 'data', 'x_state.json');
+  // 复制预置的 Cookie 文件到 data 目录（如果不存在）
+  const presetCookiePath = path.join(__dirname, 'preset', 'x_state.json');
+  const targetCookiePath = path.join(dataDir, 'x_state.json');
+  
   if (fs.existsSync(presetCookiePath)) {
-    console.log('✅ 发现预置的 Twitter Cookie 文件');
+    if (!fs.existsSync(targetCookiePath)) {
+      fs.copyFileSync(presetCookiePath, targetCookiePath);
+      console.log('✅ 已复制预置的 Twitter Cookie 文件到 data 目录');
+    } else {
+      console.log('✅ Twitter Cookie 文件已存在，跳过复制');
+    }
   } else {
     console.log('⚠️ 未发现预置的 Cookie 文件，将使用自动登录');
   }
