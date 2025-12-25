@@ -18,7 +18,7 @@ fi
 
 # 安装 twikit
 echo "📦 安装 twikit..."
-pip3 install twikit
+pip3 install twikit --break-system-packages
 
 # 验证安装
 if python3 -c "import twikit" 2>/dev/null; then
