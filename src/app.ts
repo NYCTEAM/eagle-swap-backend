@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import compression from 'compression';
+import path from 'path';
 import { initDatabase } from './database/init';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { logger, logRequest } from './utils/logger';
@@ -44,6 +45,9 @@ import twitterLoginHelperRouter from './routes/twitter-login-helper';
 import { bridgeRelayerService } from './services/bridgeRelayerService';
 
 const app = express();
+
+// Serve static files from public directory
+app.use(express.static(path.join(__dirname, '../public')));
 
 // Trust proxy - required for Nginx reverse proxy
 app.set('trust proxy', 1);
