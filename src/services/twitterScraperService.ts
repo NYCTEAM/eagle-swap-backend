@@ -74,25 +74,38 @@ class TwitterScraperService {
       console.log('🔐 Logging in to Twitter...');
       
       await this.page!.goto('https://twitter.com/i/flow/login', {
-        waitUntil: 'networkidle',
-        timeout: 30000
+        waitUntil: 'domcontentloaded',
+        timeout: 60000
       });
 
-      // 等待用户名输入框
-      await this.page!.waitForSelector('input[autocomplete="username"]', { timeout: 10000 });
-      await this.page!.fill('input[autocomplete="username"]', this.config.username);
-      
-      // 点击下一步
-      await this.page!.click('div[role="button"]:has-text("Next")');
-      await this.page!.waitForTimeout(2000);
+      // 等待页面加载
+      await this.page!.waitForTimeout(3000);
 
-      // 等待密码输入框
-      await this.page!.waitForSelector('input[type="password"]', { timeout: 10000 });
-      await this.page!.fill('input[type="password"]', this.config.password);
+      // 等待并填写用户名
+      console.log('📝 Filling username...');
+      await this.page!.waitForSelector('input[autocomplete="username"]', { timeout: 20000 });
+      await this.page!.fill('input[autocomplete="username"]', this.config.username);
+      await this.page!.waitForTimeout(1000);
+      
+      // 点击下一步 - 使用更通用的选择器
+      console.log('👆 Clicking Next button...');
+      const nextButton = await this.page!.locator('button:has-text("Next"), div[role="button"]:has-text("Next"), span:has-text("Next")').first();
+      await nextButton.click();
+      await this.page!.waitForTimeout(3000);
+
+      // 等待并填写密码
+      console.log('🔑 Filling password...');
+      await this.page!.waitForSelector('input[type="password"], input[name="password"]', { timeout: 20000 });
+      await this.page!.fill('input[type="password"], input[name="password"]', this.config.password);
+      await this.page!.waitForTimeout(1000);
 
       // 点击登录
-      await this.page!.click('div[role="button"][data-testid="LoginForm_Login_Button"]');
-      await this.page!.waitForLoadState('networkidle', { timeout: 30000 });
+      console.log('🚪 Clicking Login button...');
+      const loginButton = await this.page!.locator('[data-testid="LoginForm_Login_Button"], button:has-text("Log in"), div[role="button"]:has-text("Log in")').first();
+      await loginButton.click();
+      
+      // 等待登录完成
+      await this.page!.waitForTimeout(5000);
 
       this.isLoggedIn = true;
       console.log('✅ Successfully logged in to Twitter');
