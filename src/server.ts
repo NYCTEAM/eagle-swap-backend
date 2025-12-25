@@ -45,8 +45,9 @@ const startServer = async () => {
       console.error('❌ Failed to initialize news feed service:', error);
     }
 
-    // Initialize Twitter monitor with Puppeteer
+    // Initialize Twitter monitor
     try {
+      console.log('🔧 Initializing Twitter monitor service...');
       twitterMonitorService.initDatabase();
       console.log('✅ Twitter monitor database initialized');
       
@@ -117,8 +118,10 @@ const startServer = async () => {
       console.log('   📊 Normal accounts: every 15 minutes');
       console.log('   ❄️  Cold accounts: every 30 minutes');
       console.log('   🔄 Auto-adjust priorities: every hour');
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Failed to initialize Twitter monitor service:', error);
+      console.error('Error details:', error?.message);
+      console.error('Stack trace:', error?.stack);
     }
 
     // 图表功能已移除 - 禁用价格收集服务
