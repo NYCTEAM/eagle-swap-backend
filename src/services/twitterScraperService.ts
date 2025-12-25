@@ -7,8 +7,10 @@
 import { chromium, Browser, Page } from 'playwright';
 import Database from 'better-sqlite3';
 import path from 'path';
+import fs from 'fs';
 
 const db = new Database(path.join(__dirname, '../../data/eagleswap.db'));
+const STATE_PATH = path.join(__dirname, '../../data/x_state.json');
 
 interface ScraperConfig {
   username: string;
@@ -55,6 +57,7 @@ class TwitterScraperService {
 
     const context = await this.browser.newContext({
       viewport: { width: 1280, height: 800 },
+      locale: 'en-US', // 固定英文，减少语言问题
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     });
 
@@ -64,53 +67,108 @@ class TwitterScraperService {
   }
 
   /**
-   * 登录Twitter
+   * 登录X (Twitter)
    */
   async login() {
     if (this.isLoggedIn) return;
     if (!this.page) await this.initBrowser();
 
+    const page = this.page!;
+    const ctx = page.context();
+
+    // ✅ 如果之前保存过登录态，直接复用（避免每次走登录流程）
+    if (fs.existsSync(STATE_PATH)) {
+      try {
+        console.log('🍪 Loading saved session...');
+        const cookies = JSON.parse(fs.readFileSync(STATE_PATH, 'utf8'));
+        await ctx.addCookies(cookies);
+        
+        // 验证是否已登录
+        await page.goto('https://x.com/home', { waitUntil: 'domcontentloaded', timeout: 60000 });
+        await page.waitForTimeout(2000);
+        
+        this.isLoggedIn = true;
+        console.log('✅ Session loaded, login skipped');
+        return;
+      } catch (err) {
+        console.log('⚠️ Failed to reuse session, continue normal login...');
+      }
+    }
+
     try {
-      console.log('🔐 Logging in to Twitter...');
-      
-      await this.page!.goto('https://twitter.com/i/flow/login', {
-        waitUntil: 'domcontentloaded',
-        timeout: 60000
-      });
+      console.log('🔐 Logging in to X...');
+      await page.goto('https://x.com/i/flow/login', { waitUntil: 'domcontentloaded', timeout: 60000 });
+      await page.waitForTimeout(2000);
 
-      // 等待页面加载
-      await this.page!.waitForTimeout(3000);
+      // 1) 处理可能的 cookie 弹窗
+      try {
+        const cookieBtn = page.getByRole('button', { name: /Accept|Agree|接受|同意/i });
+        if (await cookieBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+          await cookieBtn.click();
+          await page.waitForTimeout(800);
+        }
+      } catch {}
 
-      // 等待并填写用户名
-      console.log('📝 Filling username...');
-      await this.page!.waitForSelector('input[autocomplete="username"]', { timeout: 20000 });
-      await this.page!.fill('input[autocomplete="username"]', this.config.username);
-      await this.page!.waitForTimeout(1000);
-      
-      // 点击下一步 - 使用更通用的选择器
-      console.log('👆 Clicking Next button...');
-      const nextButton = await this.page!.locator('button:has-text("Next"), div[role="button"]:has-text("Next"), span:has-text("Next")').first();
-      await nextButton.click();
-      await this.page!.waitForTimeout(3000);
+      // 2) 输入用户名
+      const userInput = page.locator('input[autocomplete="username"]').first()
+        .or(page.locator('input[name="text"]').first());
+      await userInput.waitFor({ state: 'visible', timeout: 30000 });
+      await userInput.fill(this.config.username);
+      await page.waitForTimeout(300);
 
-      // 等待并填写密码
-      console.log('🔑 Filling password...');
-      await this.page!.waitForSelector('input[type="password"], input[name="password"]', { timeout: 20000 });
-      await this.page!.fill('input[type="password"], input[name="password"]', this.config.password);
-      await this.page!.waitForTimeout(1000);
+      // 3) 点击 Next（中英兼容）
+      const nextBtn = page.getByRole('button', { name: /Next|下一步|继续/i }).first();
+      await nextBtn.waitFor({ state: 'visible', timeout: 30000 });
+      await nextBtn.click();
+      await page.waitForTimeout(1200);
 
-      // 点击登录
-      console.log('🚪 Clicking Login button...');
-      const loginButton = await this.page!.locator('[data-testid="LoginForm_Login_Button"], button:has-text("Log in"), div[role="button"]:has-text("Log in")').first();
-      await loginButton.click();
-      
-      // 等待登录完成
-      await this.page!.waitForTimeout(5000);
+      // 4) 处理可能的验证挑战（email/phone）
+      try {
+        const challengeInput = page.locator('input[name="text"]').first();
+        const challengeTitle = page.locator('text=/Enter your phone|Enter your email|验证|确认/i');
+        if (await challengeInput.isVisible({ timeout: 3000 }).catch(() => false) && 
+            await challengeTitle.isVisible({ timeout: 3000 }).catch(() => false)) {
+          console.log('⚠️ Challenge step detected (email/phone).');
+          await challengeInput.fill(this.config.username);
+          const nextBtn2 = page.getByRole('button', { name: /Next|下一步|继续/i }).first();
+          await nextBtn2.click();
+          await page.waitForTimeout(1200);
+        }
+      } catch {}
+
+      // 5) 输入密码
+      const passInput = page.locator('input[type="password"], input[name="password"]').first();
+      await passInput.waitFor({ state: 'visible', timeout: 30000 });
+      await passInput.fill(this.config.password);
+      await page.waitForTimeout(300);
+
+      // 6) 点击 Log in
+      const loginBtn = page.getByRole('button', { name: /Log in|Sign in|登录|登入/i }).first()
+        .or(page.locator('[data-testid="LoginForm_Login_Button"]').first());
+      await loginBtn.waitFor({ state: 'visible', timeout: 30000 });
+      await loginBtn.click();
+
+      // 7) 等待进入已登录页面
+      await page.waitForLoadState('domcontentloaded', { timeout: 60000 });
+      await page.waitForTimeout(2000);
 
       this.isLoggedIn = true;
-      console.log('✅ Successfully logged in to Twitter');
+      console.log('✅ Successfully logged in');
+
+      // ✅ 保存 cookie（下次直接复用）
+      const cookies = await ctx.cookies();
+      fs.writeFileSync(STATE_PATH, JSON.stringify(cookies, null, 2));
+      console.log('💾 Saved session cookies');
     } catch (error) {
-      console.error('❌ Failed to login to Twitter:', error);
+      // ✅ 出错时保存截图
+      try {
+        await page.screenshot({ 
+          path: path.join(__dirname, '../../data/x_login_error.png'), 
+          fullPage: true 
+        });
+        console.log('🧩 Saved debug screenshot: data/x_login_error.png');
+      } catch {}
+      console.error('❌ Failed to login:', error);
       throw error;
     }
   }
@@ -125,14 +183,14 @@ class TwitterScraperService {
     try {
       console.log(`🐦 Fetching tweets from @${username}...`);
 
-      // 访问用户主页
-      await this.page.goto(`https://twitter.com/${username}`, {
-        waitUntil: 'networkidle',
-        timeout: 30000
+      // 访问用户主页 (使用 x.com)
+      await this.page.goto(`https://x.com/${username}`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 60000
       });
 
       // 等待推文加载
-      await this.page.waitForSelector('article[data-testid="tweet"]', { timeout: 10000 });
+      await this.page.waitForSelector('article[data-testid="tweet"]', { timeout: 20000 });
 
       // 滚动加载更多推文
       for (let i = 0; i < 3; i++) {
