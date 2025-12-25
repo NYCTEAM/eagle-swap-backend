@@ -4,9 +4,9 @@
     "value": "v1%3A176665782528006015",
     "domain": ".x.com",
     "path": "/",
-    "expires": 1801217906.820008,
-    "httpOnly": false,
     "secure": true,
+    "httpOnly": false,
+    "expires": 1801217906,
     "sameSite": "None"
   },
   {
@@ -14,9 +14,9 @@
     "value": "v1%3A176665782528006015",
     "domain": ".x.com",
     "path": "/",
-    "expires": 1801217906.819907,
-    "httpOnly": false,
     "secure": true,
+    "httpOnly": false,
+    "expires": 1801217906,
     "sameSite": "None"
   },
   {
@@ -24,9 +24,9 @@
     "value": "v1%3A176665782528006015",
     "domain": ".x.com",
     "path": "/",
-    "expires": 1801217829.002786,
-    "httpOnly": false,
     "secure": true,
+    "httpOnly": false,
+    "expires": 1801217829,
     "sameSite": "None"
   },
   {
@@ -34,9 +34,9 @@
     "value": "\"v1_6WXgnjSqOMIwDVwRp7LD9A==\"",
     "domain": ".x.com",
     "path": "/",
-    "expires": 1801217829.055051,
-    "httpOnly": false,
     "secure": true,
+    "httpOnly": false,
+    "expires": 1801217829,
     "sameSite": "None"
   },
   {
@@ -44,9 +44,9 @@
     "value": "2004134293757444284",
     "domain": ".x.com",
     "path": "/",
-    "expires": 1766666829.055115,
-    "httpOnly": false,
     "secure": true,
+    "httpOnly": false,
+    "expires": 1766666829,
     "sameSite": "Lax"
   },
   {
@@ -54,9 +54,9 @@
     "value": "935d2f1ece40437695cb5ea8edf5fa03",
     "domain": ".x.com",
     "path": "/",
-    "expires": 1801217906,
-    "httpOnly": false,
     "secure": false,
+    "httpOnly": false,
+    "expires": 1801217906,
     "sameSite": "Lax"
   },
   {
@@ -64,9 +64,9 @@
     "value": "v1%3A176665782914308455",
     "domain": ".twitter.com",
     "path": "/",
-    "expires": 1801217832.862573,
-    "httpOnly": false,
     "secure": true,
+    "httpOnly": false,
+    "expires": 1801217832,
     "sameSite": "None"
   },
   {
@@ -74,9 +74,9 @@
     "value": "v1%3A176665782914308455",
     "domain": ".twitter.com",
     "path": "/",
-    "expires": 1801217832.86261,
-    "httpOnly": false,
     "secure": true,
+    "httpOnly": false,
+    "expires": 1801217832,
     "sameSite": "None"
   },
   {
@@ -84,9 +84,9 @@
     "value": "\"v1_JVi+TtbLy177aOuEYOW3/w==\"",
     "domain": ".twitter.com",
     "path": "/",
-    "expires": 1801217832.862648,
-    "httpOnly": false,
     "secure": true,
+    "httpOnly": false,
+    "expires": 1801217832,
     "sameSite": "None"
   },
   {
@@ -94,9 +94,9 @@
     "value": "v1%3A176665782914308455",
     "domain": ".twitter.com",
     "path": "/",
-    "expires": 1801217832.86267,
-    "httpOnly": false,
     "secure": true,
+    "httpOnly": false,
+    "expires": 1801217832,
     "sameSite": "None"
   },
   {
@@ -104,9 +104,9 @@
     "value": "{\"i_l\":0,\"i_ll\":1766657833246,\"i_b\":\"JvEs1F55t82YoqzZAwlxvK3NB16Qm2YKvqJXdwkLaw8\",\"i_e\":{\"enable_itp_optimization\":0}}",
     "domain": "x.com",
     "path": "/",
-    "expires": 1782209833,
-    "httpOnly": false,
     "secure": false,
+    "httpOnly": false,
+    "expires": 1782209833,
     "sameSite": "Lax"
   },
   {
@@ -114,9 +114,9 @@
     "value": "TvPUtfzmE2zrUkE3vsHPKO4oDCEpDft6Nn15KNgf",
     "domain": ".x.com",
     "path": "/",
-    "expires": 1801217904.874979,
-    "httpOnly": true,
     "secure": true,
+    "httpOnly": true,
+    "expires": 1801217904,
     "sameSite": "Lax"
   },
   {
@@ -124,9 +124,9 @@
     "value": "11fe5f67b3b63dc0b5b6d51ec90d5013360edef1",
     "domain": ".x.com",
     "path": "/",
-    "expires": 1801217904.875142,
-    "httpOnly": true,
     "secure": true,
+    "httpOnly": true,
+    "expires": 1801217904,
     "sameSite": "None"
   },
   {
@@ -134,9 +134,9 @@
     "value": "c42cafd852ba1887191c8b5b93ca0ef7ea790d8df3f973088b2ad6f0a7b125bbb25dc3bc6d17baf203523bca400829608477f7868d5d504ed413d80599a26e5c4c156d32dc5722cfd210822b1140edbc",
     "domain": ".x.com",
     "path": "/",
-    "expires": 1801217905.086419,
-    "httpOnly": false,
     "secure": true,
+    "httpOnly": false,
+    "expires": 1801217905,
     "sameSite": "Lax"
   },
   {
@@ -144,9 +144,8 @@
     "value": "en",
     "domain": "x.com",
     "path": "/",
-    "expires": -1,
-    "httpOnly": false,
     "secure": false,
+    "httpOnly": false,
     "sameSite": "Lax"
   },
   {
@@ -154,9 +153,9 @@
     "value": "u%3D1967486272294866944",
     "domain": ".x.com",
     "path": "/",
-    "expires": 1798193906.820055,
-    "httpOnly": false,
     "secure": true,
+    "httpOnly": false,
+    "expires": 1798193906,
     "sameSite": "None"
   },
   {
@@ -164,9 +163,9 @@
     "value": "AHWqTUmH2TArQ_YGNa37qgSRx3H5yVgH4gBAMainnnJKQTOBNYlQ5eReTvwdCL0-2ss",
     "domain": ".doubleclick.net",
     "path": "/",
-    "expires": 1801217907.086903,
-    "httpOnly": true,
     "secure": true,
+    "httpOnly": true,
+    "expires": 1801217907,
     "sameSite": "None"
   },
   {
@@ -174,9 +173,9 @@
     "value": "4qjHGQ_q1mXF86t1qa2JHnFRNs0YiHkDUzXsRJ1eiE4-1766657906.6381128-1.0.1.1-ZxJxhGMrUpXRrkj9IBcodM.Xo21h77GP.mUIPkpZWh8DhbI1tv0qc3Ofsbgpq0c4SyP_qgqWGweRChH97.JIwtyZBhtI2AHDgIv5cgw5LK1AM12bsfPP42Y_ZznaMU6D",
     "domain": ".x.com",
     "path": "/",
-    "expires": 1766659710.389814,
-    "httpOnly": true,
     "secure": true,
+    "httpOnly": true,
+    "expires": 1766659710,
     "sameSite": "Lax"
   }
 ]
