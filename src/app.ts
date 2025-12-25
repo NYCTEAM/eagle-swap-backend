@@ -39,6 +39,7 @@ import multichainNftRouter from './routes/multichainNft';
 import nftMiningRouter from './routes/nft-mining';
 import okxBridgeRouter from './routes/okxBridge';
 import newsRouter from './routes/news';
+import twitterRouter from './routes/twitter';
 import { bridgeRelayerService } from './services/bridgeRelayerService';
 
 const app = express();
@@ -166,6 +167,7 @@ app.use('/api/multichain-nft', multichainNftRouter);
 app.use('/api/nft-mining', nftMiningRouter);
 app.use('/api/okx-bridge', okxBridgeRouter);
 app.use('/api/news', newsRouter);
+app.use('/api/twitter', twitterRouter);
 
 // Root endpoint
 app.get('/', (req, res) => {

@@ -1,9 +1,10 @@
 import dotenv from 'dotenv';
-import { app, initializeApp } from './app';
-import { logger } from './utils/logger';
-import { startDailySettlement } from './services/dailySettlement';
-import { startOTCSync } from './services/otcSync';
+import app from './app';
+import { initializeDatabase } from './database/init';
+import { startPriceUpdates } from './services/priceService';
+import { startBridgeRelayer } from './services/bridgeRelayerService';
 import newsFeedService from './services/newsFeedService';
+import twitterMonitorService from './services/twitterMonitorService';
 // 图表功能已移除 - 不需要价格收集服务
 // import { priceCollector } from './services/priceCollector';
 // import { hotPairsMonitor } from './services/hotPairsMonitor';
@@ -49,6 +50,32 @@ const startServer = async () => {
       logger.info('News feed auto-sync started (every 5 minutes)');
     } catch (error) {
       logger.error('Failed to initialize news feed service', { error });
+    }
+
+    // Initialize Twitter monitor
+    try {
+      twitterMonitorService.initDatabase();
+      logger.info('Twitter monitor database initialized');
+      
+      // Monitor Twitter on startup
+      twitterMonitorService.monitorAllFollows().then(count => {
+        logger.info(`Initial Twitter monitor completed: ${count} tweets`);
+      }).catch(err => {
+        logger.error('Failed to monitor Twitter', { error: err });
+      });
+      
+      // Auto-monitor Twitter every 10 minutes
+      setInterval(() => {
+        twitterMonitorService.monitorAllFollows().then(count => {
+          logger.info(`Auto Twitter monitor completed: ${count} tweets`);
+        }).catch(err => {
+          logger.error('Failed to monitor Twitter', { error: err });
+        });
+      }, 10 * 60 * 1000); // 每10分钟
+      
+      logger.info('Twitter monitor auto-sync started (every 10 minutes)');
+    } catch (error) {
+      logger.error('Failed to initialize Twitter monitor service', { error });
     }
 
     // 图表功能已移除 - 禁用价格收集服务
