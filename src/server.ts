@@ -1,8 +1,6 @@
 import dotenv from 'dotenv';
-import app from './app';
+import { app } from './app';
 import { initializeDatabase } from './database/init';
-import { startPriceUpdates } from './services/priceService';
-import { startBridgeRelayer } from './services/bridgeRelayerService';
 import newsFeedService from './services/newsFeedService';
 import twitterMonitorService from './services/twitterMonitorService';
 // 图表功能已移除 - 不需要价格收集服务
@@ -17,65 +15,59 @@ const HOST = process.env.HOST || '0.0.0.0';
 
 const startServer = async () => {
   try {
-    // Initialize the application (database, etc.)
-    await initializeApp();
-
-    // Start daily settlement cron job
-    startDailySettlement();
-
-    // Start OTC event sync service
-    startOTCSync();
+    // Initialize the database
+    await initializeDatabase();
 
     // Initialize news feed database
     try {
       newsFeedService.initDatabase();
-      logger.info('News feed database initialized');
+      console.log('✅ News feed database initialized');
       
       // Fetch news on startup
       newsFeedService.fetchAllRSS().then(count => {
-        logger.info(`Initial news fetch completed: ${count} articles`);
+        console.log(`✅ Initial news fetch completed: ${count} articles`);
       }).catch(err => {
-        logger.error('Failed to fetch initial news', { error: err });
+        console.error('❌ Failed to fetch initial news:', err);
       });
       
       // Auto-fetch news every 5 minutes
       setInterval(() => {
         newsFeedService.fetchAllRSS().then(count => {
-          logger.info(`Auto news fetch completed: ${count} articles`);
+          console.log(`✅ Auto news fetch completed: ${count} articles`);
         }).catch(err => {
-          logger.error('Failed to fetch news', { error: err });
+          console.error('❌ Failed to fetch news:', err);
         });
       }, 5 * 60 * 1000); // 每5分钟
       
-      logger.info('News feed auto-sync started (every 5 minutes)');
+      console.log('✅ News feed auto-sync started (every 5 minutes)');
     } catch (error) {
-      logger.error('Failed to initialize news feed service', { error });
+      console.error('❌ Failed to initialize news feed service:', error);
     }
 
     // Initialize Twitter monitor
     try {
       twitterMonitorService.initDatabase();
-      logger.info('Twitter monitor database initialized');
+      console.log('✅ Twitter monitor database initialized');
       
       // Monitor Twitter on startup
       twitterMonitorService.monitorAllFollows().then(count => {
-        logger.info(`Initial Twitter monitor completed: ${count} tweets`);
+        console.log(`✅ Initial Twitter monitor completed: ${count} tweets`);
       }).catch(err => {
-        logger.error('Failed to monitor Twitter', { error: err });
+        console.error('❌ Failed to monitor Twitter:', err);
       });
       
       // Auto-monitor Twitter every 10 minutes
       setInterval(() => {
         twitterMonitorService.monitorAllFollows().then(count => {
-          logger.info(`Auto Twitter monitor completed: ${count} tweets`);
+          console.log(`✅ Auto Twitter monitor completed: ${count} tweets`);
         }).catch(err => {
-          logger.error('Failed to monitor Twitter', { error: err });
+          console.error('❌ Failed to monitor Twitter:', err);
         });
       }, 10 * 60 * 1000); // 每10分钟
       
-      logger.info('Twitter monitor auto-sync started (every 10 minutes)');
+      console.log('✅ Twitter monitor auto-sync started (every 10 minutes)');
     } catch (error) {
-      logger.error('Failed to initialize Twitter monitor service', { error });
+      console.error('❌ Failed to initialize Twitter monitor service:', error);
     }
 
     // 图表功能已移除 - 禁用价格收集服务
@@ -87,22 +79,10 @@ const startServer = async () => {
 
     // Start the server
     const server = app.listen(PORT, HOST as string, () => {
-      logger.info('Eagle Swap Backend started', {
-        port: PORT,
-        host: HOST,
-        environment: process.env.NODE_ENV || 'development',
-        nodeVersion: process.version,
-        timestamp: new Date().toISOString()
-      });
-
-      // Log configuration
-      logger.info('Configuration loaded', {
-        eagleRpcBackendUrl: process.env.EAGLE_RPC_BACKEND_URL || 'http://localhost:3000',
-        eagleIndexerUrl: process.env.EAGLE_INDEXER_URL || 'http://localhost:3005',
-        databasePath: process.env.DATABASE_PATH || './data/eagleswap.db',
-        logLevel: process.env.LOG_LEVEL || 'info',
-        nodeEnv: process.env.NODE_ENV || 'development'
-      });
+      console.log('✅ Eagle Swap Backend started');
+      console.log(`   Port: ${PORT}`);
+      console.log(`   Host: ${HOST}`);
+      console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
 
       console.log(`
 ╔══════════════════════════════════════════════════════════════╗
@@ -124,31 +104,31 @@ const startServer = async () => {
     // Handle server errors
     server.on('error', (error: any) => {
       if (error.code === 'EADDRINUSE') {
-        logger.error(`Port ${PORT} is already in use`);
+        console.error(`❌ Port ${PORT} is already in use`);
         process.exit(1);
       } else {
-        logger.error('Server error', { error });
+        console.error('❌ Server error:', error);
         process.exit(1);
       }
     });
 
     // Graceful shutdown
     const gracefulShutdown = (signal: string) => {
-      logger.info(`Received ${signal}, shutting down gracefully`);
+      console.log(`Received ${signal}, shutting down gracefully`);
       
-      server.close((err) => {
+      server.close((err: any) => {
         if (err) {
-          logger.error('Error during server shutdown', { error: err });
+          console.error('❌ Error during server shutdown:', err);
           process.exit(1);
         }
         
-        logger.info('Server closed successfully');
+        console.log('✅ Server closed successfully');
         process.exit(0);
       });
 
       // Force close after 10 seconds
       setTimeout(() => {
-        logger.error('Forced shutdown after timeout');
+        console.error('❌ Forced shutdown after timeout');
         process.exit(1);
       }, 10000);
     };
@@ -157,7 +137,7 @@ const startServer = async () => {
     process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
   } catch (error) {
-    logger.error('Failed to start server', { error });
+    console.error('❌ Failed to start server:', error);
     process.exit(1);
   }
 };
