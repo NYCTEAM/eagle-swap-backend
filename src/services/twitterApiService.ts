@@ -27,10 +27,13 @@ interface Tweet {
 }
 
 interface FetchTweetsResponse {
-  tweets: Tweet[];
-  has_next_page: boolean;
-  next_cursor?: string;
   status: string;
+  code: number;
+  msg: string;
+  data: {
+    tweets: Tweet[];
+    pin_tweet?: Tweet;
+  };
 }
 
 export class TwitterApiService {
@@ -51,12 +54,12 @@ export class TwitterApiService {
 
       console.log(`📊 API Response for @${username}:`, JSON.stringify(result).substring(0, 200));
 
-      if (result.status === 'success' && result.tweets) {
-        console.log(`✅ Got ${result.tweets.length} tweets from API`);
-        return result.tweets.slice(0, limit);
+      if (result.status === 'success' && result.data?.tweets) {
+        console.log(`✅ Got ${result.data.tweets.length} tweets from API`);
+        return result.data.tweets.slice(0, limit);
       }
 
-      console.warn(`⚠️ API returned status: ${result.status}, tweets: ${result.tweets?.length || 0}`);
+      console.warn(`⚠️ API returned status: ${result.status}, tweets: ${result.data?.tweets?.length || 0}`);
       return [];
     } catch (error: any) {
       console.error(`❌ Failed to fetch tweets for @${username}:`, error?.message || error);
