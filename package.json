@@ -9,7 +9,7 @@
     "build:prod": "tsc",
     "prestart": "node init-on-startup.js || true && npx playwright install chromium || true",
     "start": "node dist/server.js",
-    "postinstall": "npx playwright install chromium || true",
+    "postinstall": "echo 'Skipping playwright install during build' || true",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
