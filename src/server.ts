@@ -105,22 +105,36 @@ const startServer = async () => {
       } else {
         console.log('⚠️ Twitter credentials not found, using TwitterAPI.io');
         
-        // 使用 TwitterAPI.io 方式
-        twitterMonitorService.monitorAllFollows().then(count => {
-          console.log(`✅ Initial Twitter monitor completed: ${count} tweets`);
-        }).catch(err => {
-          console.error('❌ Failed to monitor Twitter:', err);
-        });
+        // 初始化热门账号推文
+        console.log('🚀 Initializing popular Twitter accounts...');
+        const popularAccounts = ['cz_binance', 'binance', 'elonmusk', 'VitalikButerin', 'heyibinance'];
         
+        (async () => {
+          let totalInitial = 0;
+          for (const username of popularAccounts) {
+            try {
+              const tweets = await twitterMonitorService.fetchTweetsFromApi(username);
+              const saved = twitterMonitorService.saveTweets(tweets);
+              totalInitial += saved;
+              console.log(`✅ Initialized @${username}: ${saved} tweets`);
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            } catch (error) {
+              console.error(`❌ Failed to initialize @${username}:`, error);
+            }
+          }
+          console.log(`🎉 Popular accounts initialized: ${totalInitial} tweets`);
+        })();
+        
+        // 定时监听所有被关注的账号
         setInterval(() => {
           twitterMonitorService.monitorAllFollows().then(count => {
-            console.log(`✅ Auto Twitter monitor completed: ${count} tweets`);
+            console.log(`✅ Auto Twitter monitor completed: ${count} new tweets`);
           }).catch(err => {
             console.error('❌ Failed to monitor Twitter:', err);
           });
-        }, 1 * 60 * 1000);
+        }, 5 * 60 * 1000); // 每5分钟
         
-        console.log('✅ Twitter monitor auto-sync started (every 1 minute)');
+        console.log('✅ Twitter monitor auto-sync started (every 5 minutes)');
       }
     } catch (error) {
       console.error('❌ Failed to initialize Twitter monitor service:', error);
