@@ -3,7 +3,6 @@ import { app } from './app';
 import { initializeDatabase } from './database/init';
 import newsFeedService from './services/newsFeedService';
 import twitterMonitorService from './services/twitterMonitorService';
-import TwitterScraperService from './services/twitterScraperService';
 // 图表功能已移除 - 不需要价格收集服务
 // import { priceCollector } from './services/priceCollector';
 // import { hotPairsMonitor } from './services/hotPairsMonitor';
