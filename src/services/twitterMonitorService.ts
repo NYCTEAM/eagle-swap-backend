@@ -37,10 +37,14 @@ CREATE TABLE IF NOT EXISTS user_twitter_follows (
   twitter_username TEXT NOT NULL,
   display_name TEXT,
   enabled INTEGER DEFAULT 1,
+  priority INTEGER DEFAULT 2,
   last_fetch_at TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   UNIQUE(user_address, twitter_username)
 );
+
+-- 添加 priority 列（如果不存在）
+ALTER TABLE user_twitter_follows ADD COLUMN priority INTEGER DEFAULT 2;
 
 -- Twitter推文表（扩展）
 CREATE TABLE IF NOT EXISTS twitter_posts (
@@ -225,6 +229,112 @@ CREATE INDEX IF NOT EXISTS idx_twitter_published ON twitter_posts(published_at D
       
     } catch (error) {
       console.error('Error monitoring Twitter follows:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * 分级监控：根据优先级和时间间隔更新
+   * Priority 1 (热门): 每 5 分钟
+   * Priority 2 (普通): 每 15 分钟
+   * Priority 3 (冷门): 每 30 分钟
+   */
+  async monitorByPriority(priority: number, intervalMinutes: number) {
+    try {
+      // 获取指定优先级且超过更新间隔的账号
+      const follows = db.prepare(`
+        SELECT DISTINCT twitter_username, display_name, priority, last_fetch_at
+        FROM user_twitter_follows 
+        WHERE enabled = 1 
+          AND priority = ?
+          AND (
+            last_fetch_at IS NULL 
+            OR datetime(last_fetch_at, '+${intervalMinutes} minutes') <= datetime('now')
+          )
+      `).all(priority) as TwitterAccount[];
+      
+      if (follows.length === 0) {
+        return 0;
+      }
+      
+      const priorityLabel = priority === 1 ? '🔥 热门' : priority === 2 ? '📊 普通' : '❄️ 冷门';
+      console.log(`${priorityLabel} Monitoring ${follows.length} accounts (${intervalMinutes}min interval)...`);
+      
+      let totalNewTweets = 0;
+      
+      for (const follow of follows) {
+        const tweets = await this.fetchTweetsFromApi(follow.twitter_username);
+        const saved = this.saveTweets(tweets);
+        totalNewTweets += saved;
+        
+        // 更新最后获取时间
+        db.prepare(`
+          UPDATE user_twitter_follows 
+          SET last_fetch_at = datetime('now') 
+          WHERE twitter_username = ?
+        `).run(follow.twitter_username);
+        
+        // 避免请求过快
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+      
+      if (totalNewTweets > 0) {
+        console.log(`✅ ${priorityLabel} ${totalNewTweets} new tweets`);
+      }
+      return totalNewTweets;
+      
+    } catch (error) {
+      console.error(`Error monitoring priority ${priority}:`, error);
+      return 0;
+    }
+  }
+
+  /**
+   * 自动调整账号优先级（根据关注人数）
+   * >= 10 人关注 -> 热门 (Priority 1)
+   * >= 3 人关注 -> 普通 (Priority 2)
+   * < 3 人关注 -> 冷门 (Priority 3)
+   */
+  autoAdjustPriorities() {
+    try {
+      // 统计每个账号的关注人数
+      const stats = db.prepare(`
+        SELECT twitter_username, COUNT(DISTINCT user_address) as follower_count
+        FROM user_twitter_follows
+        WHERE enabled = 1
+        GROUP BY twitter_username
+      `).all() as Array<{ twitter_username: string; follower_count: number }>;
+      
+      let updated = 0;
+      for (const stat of stats) {
+        let newPriority = 3; // 默认冷门
+        
+        if (stat.follower_count >= 10) {
+          newPriority = 1; // 热门
+        } else if (stat.follower_count >= 3) {
+          newPriority = 2; // 普通
+        }
+        
+        const result = db.prepare(`
+          UPDATE user_twitter_follows 
+          SET priority = ? 
+          WHERE twitter_username = ? AND priority != ?
+        `).run(newPriority, stat.twitter_username, newPriority);
+        
+        if (result.changes > 0) {
+          const label = newPriority === 1 ? '🔥 Hot' : newPriority === 2 ? '📊 Normal' : '❄️ Cold';
+          console.log(`📊 @${stat.twitter_username} -> ${label} (${stat.follower_count} followers)`);
+          updated++;
+        }
+      }
+      
+      if (updated > 0) {
+        console.log(`✅ Auto-adjusted ${updated} account priorities`);
+      }
+      
+      return updated;
+    } catch (error) {
+      console.error('Error auto-adjusting priorities:', error);
       return 0;
     }
   }

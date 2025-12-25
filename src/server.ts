@@ -105,7 +105,7 @@ const startServer = async () => {
       } else {
         console.log('⚠️ Twitter credentials not found, using TwitterAPI.io');
         
-        // 初始化热门账号推文
+        // 初始化热门账号推文（设置为优先级 1）
         console.log('🚀 Initializing popular Twitter accounts...');
         const popularAccounts = ['cz_binance', 'binance', 'elonmusk', 'VitalikButerin', 'heyibinance'];
         
@@ -116,7 +116,19 @@ const startServer = async () => {
               const tweets = await twitterMonitorService.fetchTweetsFromApi(username);
               const saved = twitterMonitorService.saveTweets(tweets);
               totalInitial += saved;
-              console.log(`✅ Initialized @${username}: ${saved} tweets`);
+              
+              // 设置为热门账号（优先级 1）
+              const Database = require('better-sqlite3');
+              const path = require('path');
+              const db = new Database(path.join(__dirname, '../data/eagleswap.db'));
+              db.prepare(`
+                UPDATE user_twitter_follows 
+                SET priority = 1 
+                WHERE twitter_username = ?
+              `).run(username);
+              db.close();
+              
+              console.log(`✅ Initialized @${username}: ${saved} tweets (Priority: 🔥 Hot)`);
               await new Promise(resolve => setTimeout(resolve, 2000));
             } catch (error) {
               console.error(`❌ Failed to initialize @${username}:`, error);
@@ -125,16 +137,38 @@ const startServer = async () => {
           console.log(`🎉 Popular accounts initialized: ${totalInitial} tweets`);
         })();
         
-        // 定时监听所有被关注的账号
+        // 分级定时监听
+        // 热门账号：每 5 分钟
         setInterval(() => {
-          twitterMonitorService.monitorAllFollows().then(count => {
-            console.log(`✅ Auto Twitter monitor completed: ${count} new tweets`);
-          }).catch(err => {
-            console.error('❌ Failed to monitor Twitter:', err);
+          twitterMonitorService.monitorByPriority(1, 5).catch(err => {
+            console.error('❌ Failed to monitor hot accounts:', err);
           });
-        }, 5 * 60 * 1000); // 每5分钟
+        }, 5 * 60 * 1000);
         
-        console.log('✅ Twitter monitor auto-sync started (every 5 minutes)');
+        // 普通账号：每 15 分钟
+        setInterval(() => {
+          twitterMonitorService.monitorByPriority(2, 15).catch(err => {
+            console.error('❌ Failed to monitor normal accounts:', err);
+          });
+        }, 15 * 60 * 1000);
+        
+        // 冷门账号：每 30 分钟
+        setInterval(() => {
+          twitterMonitorService.monitorByPriority(3, 30).catch(err => {
+            console.error('❌ Failed to monitor cold accounts:', err);
+          });
+        }, 30 * 60 * 1000);
+        
+        // 每小时自动调整优先级
+        setInterval(() => {
+          twitterMonitorService.autoAdjustPriorities();
+        }, 60 * 60 * 1000);
+        
+        console.log('✅ Twitter monitor auto-sync started:');
+        console.log('   🔥 Hot accounts: every 5 minutes');
+        console.log('   📊 Normal accounts: every 15 minutes');
+        console.log('   ❄️  Cold accounts: every 30 minutes');
+        console.log('   🔄 Auto-adjust priorities: every hour');
       }
     } catch (error) {
       console.error('❌ Failed to initialize Twitter monitor service:', error);
