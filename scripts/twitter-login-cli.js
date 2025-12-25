@@ -128,9 +128,25 @@ async function login(username, password, email) {
     await humanType(page, 'input[autocomplete="username"]', accountIdentifier);
     await page.waitForTimeout(1000);
 
-    // 点击 Next
+    // 点击 Next（使用多种选择器尝试）
     console.log('👉 点击 Next...');
-    await page.click('div[role="button"]:has-text("Next")');
+    try {
+      // 尝试使用文本匹配（支持多语言）
+      const nextButton = page.locator('div[role="button"]').filter({ hasText: /Next|下一步|siguiente/i });
+      await nextButton.first().click({ timeout: 10000 });
+    } catch (e) {
+      console.log('⚠️ 文本匹配失败，尝试通过位置查找...');
+      // 通过位置查找（通常是页面上第一个或第二个按钮）
+      const buttons = await page.locator('div[role="button"]').all();
+      for (const btn of buttons) {
+        const text = await btn.textContent();
+        console.log(`找到按钮: ${text}`);
+        if (text && (text.includes('Next') || text.includes('下一步') || text.includes('siguiente'))) {
+          await btn.click();
+          break;
+        }
+      }
+    }
     await page.waitForTimeout(3000);
 
     // 检查是否需要额外验证（用户名/邮箱/手机）
@@ -142,7 +158,10 @@ async function login(username, password, email) {
       try {
         await humanType(page, 'input[data-testid="ocfEnterTextTextInput"]', username);
         await page.waitForTimeout(1000);
-        await page.click('div[role="button"]:has-text("Next")');
+        
+        // 点击验证步骤的 Next 按钮
+        const nextButton = page.locator('div[role="button"]').filter({ hasText: /Next|下一步|siguiente/i });
+        await nextButton.first().click({ timeout: 10000 });
         await page.waitForTimeout(3000);
         console.log('✅ 已输入用户名验证');
       } catch (e) {
