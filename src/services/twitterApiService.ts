@@ -49,13 +49,17 @@ export class TwitterApiService {
         `/twitter/user/last_tweets?userName=${username}`
       );
 
+      console.log(`📊 API Response for @${username}:`, JSON.stringify(result).substring(0, 200));
+
       if (result.status === 'success' && result.tweets) {
+        console.log(`✅ Got ${result.tweets.length} tweets from API`);
         return result.tweets.slice(0, limit);
       }
 
+      console.warn(`⚠️ API returned status: ${result.status}, tweets: ${result.tweets?.length || 0}`);
       return [];
-    } catch (error) {
-      console.error(`❌ Failed to fetch tweets for @${username}:`, error);
+    } catch (error: any) {
+      console.error(`❌ Failed to fetch tweets for @${username}:`, error?.message || error);
       return [];
     }
   }
