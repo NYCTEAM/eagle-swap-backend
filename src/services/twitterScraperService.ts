@@ -1,10 +1,10 @@
 /**
  * Twitter Scraper Service
- * 使用Puppeteer模拟浏览器登录Twitter并抓取推文
+ * 使用Playwright模拟浏览器登录Twitter并抓取推文
  * 完全免费，不需要API密钥
  */
 
-import puppeteer, { Browser, Page } from 'puppeteer';
+import { chromium, Browser, Page } from 'playwright';
 import Database from 'better-sqlite3';
 import path from 'path';
 
@@ -44,26 +44,21 @@ class TwitterScraperService {
     if (this.browser) return;
 
     console.log('🚀 Launching browser...');
-    this.browser = await puppeteer.launch({
+    this.browser = await chromium.launch({
       headless: this.config.headless,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu'
+        '--disable-dev-shm-usage'
       ]
     });
 
-    this.page = await this.browser.newPage();
-    await this.page.setViewport({ width: 1280, height: 800 });
-    
-    // 设置User-Agent
-    await this.page.setUserAgent(
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    );
+    const context = await this.browser.newContext({
+      viewport: { width: 1280, height: 800 },
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    });
+
+    this.page = await context.newPage();
 
     console.log('✅ Browser launched');
   }
@@ -79,13 +74,13 @@ class TwitterScraperService {
       console.log('🔐 Logging in to Twitter...');
       
       await this.page!.goto('https://twitter.com/i/flow/login', {
-        waitUntil: 'networkidle2',
+        waitUntil: 'networkidle',
         timeout: 30000
       });
 
       // 等待用户名输入框
       await this.page!.waitForSelector('input[autocomplete="username"]', { timeout: 10000 });
-      await this.page!.type('input[autocomplete="username"]', this.config.username, { delay: 100 });
+      await this.page!.fill('input[autocomplete="username"]', this.config.username);
       
       // 点击下一步
       await this.page!.click('div[role="button"]:has-text("Next")');
@@ -93,11 +88,11 @@ class TwitterScraperService {
 
       // 等待密码输入框
       await this.page!.waitForSelector('input[type="password"]', { timeout: 10000 });
-      await this.page!.type('input[type="password"]', this.config.password, { delay: 100 });
+      await this.page!.fill('input[type="password"]', this.config.password);
 
       // 点击登录
       await this.page!.click('div[role="button"][data-testid="LoginForm_Login_Button"]');
-      await this.page!.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 });
+      await this.page!.waitForLoadState('networkidle', { timeout: 30000 });
 
       this.isLoggedIn = true;
       console.log('✅ Successfully logged in to Twitter');
@@ -119,7 +114,7 @@ class TwitterScraperService {
 
       // 访问用户主页
       await this.page.goto(`https://twitter.com/${username}`, {
-        waitUntil: 'networkidle2',
+        waitUntil: 'networkidle',
         timeout: 30000
       });
 
@@ -128,7 +123,9 @@ class TwitterScraperService {
 
       // 滚动加载更多推文
       for (let i = 0; i < 3; i++) {
-        await this.page.evaluate(() => window.scrollBy(0, window.innerHeight));
+        await this.page.evaluate(() => {
+          window.scrollBy(0, window.innerHeight);
+        });
         await this.page.waitForTimeout(1000);
       }
 
