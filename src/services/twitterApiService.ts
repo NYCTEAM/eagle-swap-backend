@@ -17,6 +17,8 @@ interface Tweet {
     userName: string;
     name: string;
     id: string;
+    avatar?: string;
+    profileImageUrl?: string;
   };
   retweetCount: number;
   replyCount: number;
@@ -30,6 +32,7 @@ interface Tweet {
     author?: {
       userName: string;
       name: string;
+      avatar?: string;
     };
   };
 }

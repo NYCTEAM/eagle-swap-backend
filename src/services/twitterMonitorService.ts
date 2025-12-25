@@ -18,6 +18,7 @@ interface Tweet {
   tweet_id: string;
   username: string;
   user_display_name: string;
+  user_avatar?: string;
   content: string;
   content_zh?: string;
   published_at: string;
@@ -196,10 +197,14 @@ CREATE INDEX IF NOT EXISTS idx_twitter_published ON twitter_posts(published_at D
           quotedTweetAuthor = item.quotedTweet.author?.userName;
         }
         
+        // 获取头像 URL
+        const avatarUrl = item.author.avatar || item.author.profileImageUrl || null;
+        
         tweets.push({
           tweet_id: item.id,
           username: item.author.userName,
           user_display_name: item.author.name,
+          user_avatar: avatarUrl,
           content: item.text,
           content_zh: contentZh,
           published_at: new Date(item.createdAt).toISOString(),
@@ -228,10 +233,10 @@ CREATE INDEX IF NOT EXISTS idx_twitter_published ON twitter_posts(published_at D
   saveTweets(tweets: Tweet[]) {
     const stmt = db.prepare(`
       INSERT OR IGNORE INTO twitter_posts 
-      (tweet_id, username, user_display_name, content, content_zh, tweet_url, 
+      (tweet_id, username, user_display_name, user_avatar, content, content_zh, tweet_url, 
        is_reply, reply_to_username, quoted_tweet_id, quoted_tweet_content, 
        quoted_tweet_content_zh, quoted_tweet_author, published_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     
     let saved = 0;
@@ -241,6 +246,7 @@ CREATE INDEX IF NOT EXISTS idx_twitter_published ON twitter_posts(published_at D
           tweet.tweet_id,
           tweet.username,
           tweet.user_display_name,
+          tweet.user_avatar || null,
           tweet.content,
           tweet.content_zh || null,
           tweet.tweet_url,

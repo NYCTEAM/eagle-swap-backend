@@ -68,8 +68,11 @@ export const TweetCard: React.FC<TweetCardProps> = ({
 
   // 获取用户头像
   const getAvatar = () => {
-    if (tweet.user_avatar) return tweet.user_avatar;
-    // 默认头像：使用用户名首字母
+    // 优先使用真实头像
+    if (tweet.user_avatar) {
+      return tweet.user_avatar;
+    }
+    // 备用：使用用户名首字母生成头像
     const initial = tweet.username.charAt(0).toUpperCase();
     return `https://ui-avatars.com/api/?name=${initial}&background=1DA1F2&color=fff&size=128`;
   };
