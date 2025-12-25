@@ -42,34 +42,83 @@ class TwitterScraperService {
   }
 
   /**
-   * 初始化浏览器
+   * 初始化浏览器 - 加入反检测机制
    */
   async initBrowser() {
     if (this.browser) return;
 
-    console.log('🚀 Launching browser...');
+    console.log('🚀 Launching browser with stealth settings...');
     this.browser = await chromium.launch({
       headless: this.config.headless,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage'
+        '--disable-dev-shm-usage',
+        '--disable-blink-features=AutomationControlled', // 关键反检测参数
+        '--disable-features=IsolateOrigins,site-per-process'
       ]
     });
 
     const context = await this.browser.newContext({
       viewport: { width: 1280, height: 800 },
-      locale: 'en-US', // 固定英文，减少语言问题
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      locale: 'en-US',
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      deviceScaleFactor: 1,
+      isMobile: false,
+      hasTouch: false,
+      javaScriptEnabled: true,
+      timezoneId: 'America/New_York'
+    });
+
+    // 注入反检测脚本
+    await context.addInitScript(() => {
+      Object.defineProperty(navigator, 'webdriver', {
+        get: () => undefined,
+      });
+      // @ts-ignore
+      window.navigator.chrome = {
+        runtime: {},
+      };
+      // @ts-ignore
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => [1, 2, 3, 4, 5],
+      });
     });
 
     this.page = await context.newPage();
-
-    console.log('✅ Browser launched');
+    console.log('✅ Browser launched in stealth mode');
   }
 
   /**
-   * 登录X (Twitter)
+   * 模拟真人输入
+   */
+  async humanType(selector: string, text: string) {
+    if (!this.page) return;
+    const element = this.page.locator(selector).first();
+    await element.click();
+    await this.page.waitForTimeout(Math.random() * 500 + 200);
+    
+    // 逐字输入，随机间隔
+    for (const char of text) {
+      await this.page.keyboard.type(char, { delay: Math.random() * 100 + 50 });
+    }
+    await this.page.waitForTimeout(Math.random() * 500 + 300);
+  }
+
+  /**
+   * 截图调试辅助方法
+   */
+  async saveDebugScreenshot(filename: string) {
+    if (!this.page) return;
+    try {
+      const p = path.join(__dirname, '../../data', filename);
+      await this.page.screenshot({ path: p, fullPage: true });
+      console.log(`📸 Debug screenshot saved: ${filename}`);
+    } catch {}
+  }
+
+  /**
+   * 登录X (Twitter) - 重构后的清晰逻辑
    */
   async login() {
     if (this.isLoggedIn) return;
@@ -78,235 +127,115 @@ class TwitterScraperService {
     const page = this.page!;
     const ctx = page.context();
 
-    // ✅ 如果之前保存过登录态，直接复用（避免每次走登录流程）
+    // 1. 尝试加载保存的Session
     if (fs.existsSync(STATE_PATH)) {
       try {
         console.log('🍪 Loading saved session...');
         const cookies = JSON.parse(fs.readFileSync(STATE_PATH, 'utf8'));
         await ctx.addCookies(cookies);
         
-        // 验证是否已登录
         await page.goto('https://x.com/home', { waitUntil: 'domcontentloaded', timeout: 60000 });
-        await page.waitForTimeout(2000);
+        await page.waitForTimeout(3000);
         
-        this.isLoggedIn = true;
-        console.log('✅ Session loaded, login skipped');
-        return;
+        // 检查是否真的登录成功
+        if (page.url().includes('/home')) {
+          this.isLoggedIn = true;
+          console.log('✅ Session loaded, login skipped');
+          return;
+        } else {
+          console.log('⚠️ Session expired, clearing cookies...');
+          await ctx.clearCookies();
+        }
       } catch (err) {
         console.log('⚠️ Failed to reuse session, continue normal login...');
       }
     }
 
     try {
-      console.log('🔐 Logging in to X...');
+      console.log('🔐 Starting fresh login...');
       await page.goto('https://x.com/i/flow/login', { waitUntil: 'domcontentloaded', timeout: 60000 });
-      console.log('✅ Login page loaded');
       await page.waitForTimeout(3000);
 
-      // 1) 处理可能的 cookie 弹窗
-      try {
-        const cookieBtn = page.getByRole('button', { name: /Accept|Agree|接受|同意/i });
-        if (await cookieBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-          console.log('🍪 Clicking cookie consent...');
-          await cookieBtn.click();
-          await page.waitForTimeout(800);
-        }
-      } catch {}
-
-      // 2) 输入用户名或邮箱
-      console.log('📝 Waiting for username input...');
-      const userInput = page.locator('input[autocomplete="username"]').first();
-      await userInput.waitFor({ state: 'visible', timeout: 10000 });
+      // 2. 输入账号 (优先Email -> 其次Username)
+      console.log('📝 Step 1: Entering account identifier...');
+      const loginInput = page.locator('input[autocomplete="username"]').first();
+      await loginInput.waitFor({ state: 'visible', timeout: 10000 });
       
-      // 优先尝试使用邮箱登录，因为这通常更稳定
-      const loginId = this.config.email || this.config.username;
-      console.log(`✅ Username input found, filling with ${this.config.email ? 'email' : 'username'}...`);
+      const firstStepValue = this.config.email || this.config.username;
+      await this.humanType('input[autocomplete="username"]', firstStepValue);
       
-      // 模拟人类输入速度
-      await userInput.click();
-      await page.waitForTimeout(500);
-      await userInput.type(loginId, { delay: 100 });
-      await page.waitForTimeout(1000);
-
-      // 3) 点击 Next（中英兼容）
-      console.log('👆 Looking for Next button...');
-      const nextBtn = page.getByRole('button', { name: /Next|下一步|继续/i }).first();
-      await nextBtn.waitFor({ state: 'visible', timeout: 30000 });
-      console.log('✅ Next button found, clicking...');
-      await nextBtn.click();
-      
-      // 等待页面导航
+      await page.keyboard.press('Enter');
       await page.waitForTimeout(5000);
-      console.log('⏳ Waiting for page transition...');
 
-      // 保存中间截图
-      try {
-        await page.screenshot({ path: path.join(__dirname, '../../data/x_after_username.png'), fullPage: true });
-        console.log('📸 Saved screenshot after username step');
-      } catch {}
+      // 截图调试 Step 2
+      await this.saveDebugScreenshot('x_step2_after_id.png');
 
-      // 4) 检查是否有错误提示
-      try {
-        const errorText = await page.locator('text=/Sorry|Incorrect|wrong|error|错误/i').first().textContent({ timeout: 2000 }).catch(() => null);
-        if (errorText) {
-          console.log('❌ Error detected on page:', errorText);
-          throw new Error(`Login error: ${errorText}`);
-        }
-      } catch {}
-
-      // 5) 处理可能的验证挑战（email/phone）
-      console.log('🔍 Checking for challenge step...');
-      try {
-        // 等待一下看是否出现挑战页面
-        await page.waitForTimeout(3000);
+      // 3. 判断下一步：是密码还是验证？
+      // 检查是否要求输入手机号或用户名 (Unusual activity check)
+      const challengeInput = page.locator('input[data-testid="ocfEnterTextTextInput"]').first();
+      const passwordInput = page.locator('input[name="password"]').first();
+      
+      if (await challengeInput.isVisible({ timeout: 5000 }).catch(() => false)) {
+        console.log('⚠️ Step 1.5: Security challenge detected');
         
-        // 检查是否回到了登录首页（说明验证失败）
-        const loginPageIndicator = page.locator('text=/Sign in to X|Log in to X/i');
-        if (await loginPageIndicator.isVisible({ timeout: 2000 }).catch(() => false)) {
-          console.log('❌ Returned to login page - username or verification failed');
-          console.log('💡 Possible issues:');
-          console.log('   1. Username does not exist or is incorrect');
-          console.log('   2. Account is locked or suspended');
-          console.log('   3. Email/phone verification failed');
-          throw new Error('Login failed - returned to login page after username/verification');
-        }
+        // 判断挑战类型
+        const pageText = await page.locator('body').textContent() || '';
+        let challengeValue = '';
         
-        const challengeInput = page.locator('input[name="text"]').first();
-        if (await challengeInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-          console.log('⚠️ Challenge step detected - additional verification required.');
-          
-          // 获取页面提示文本
-          try {
-            const pageText = await page.locator('body').textContent({ timeout: 2000 });
-            const isEmailChallenge = pageText?.toLowerCase().includes('email');
-            const isPhoneChallenge = pageText?.toLowerCase().includes('phone');
-            console.log(`📋 Challenge type: ${isEmailChallenge ? 'Email' : isPhoneChallenge ? 'Phone' : 'Unknown'}`);
-          } catch {}
-          
-          // 获取页面提示文本，判断是需要邮箱还是手机
-          let verificationValue = this.config.email || this.config.phone || this.config.username;
-          try {
-            const pageText = await page.locator('body').textContent({ timeout: 2000 });
-            const lowerText = pageText?.toLowerCase() || '';
-            
-            // 优先匹配页面要求的类型
-            if (lowerText.includes('phone') && this.config.phone) {
-              console.log('� Page asks for phone, using phone number');
-              verificationValue = this.config.phone;
-            } else if (lowerText.includes('email') && this.config.email) {
-              console.log('� Page asks for email, using email address');
-              verificationValue = this.config.email;
-            } else {
-              console.log('⚠️ Could not detect specific requirement, using default verification value');
-            }
-          } catch {}
-          
-          console.log(`📝 Filling verification with: ${verificationValue}`);
-          await challengeInput.fill(verificationValue);
-          await page.waitForTimeout(1000);
-          
-          // 保存验证步骤截图
-          try {
-            await page.screenshot({ path: path.join(__dirname, '../../data/x_verification_step.png'), fullPage: true });
-            console.log('📸 Saved verification step screenshot');
-          } catch {}
-          
-          const nextBtn2 = page.getByRole('button', { name: /Next|下一步|继续/i }).first();
-          await nextBtn2.click();
-          await page.waitForTimeout(8000); // 增加等待时间
-          
-          console.log('✅ Challenge step completed, waiting for next page...');
+        if (pageText.toLowerCase().includes('phone')) {
+          console.log('� Challenge asks for phone number');
+          challengeValue = this.config.phone || '';
+          if (!challengeValue) console.error('❌ Phone number required but not configured!');
+        } else if (pageText.toLowerCase().includes('email')) {
+          console.log('📧 Challenge asks for email');
+          challengeValue = this.config.email || '';
+        } else if (pageText.toLowerCase().includes('username')) {
+          console.log('👤 Challenge asks for username');
+          challengeValue = this.config.username;
         } else {
-          console.log('✅ No challenge step detected');
+          // 智能回落：如果第一步用了邮箱，这里填用户名；如果第一步用了用户名，这里填邮箱
+          challengeValue = (firstStepValue === this.config.email) ? this.config.username : (this.config.email || '');
+          console.log(`🤔 Unknown challenge, trying fallback: ${challengeValue}`);
         }
-      } catch (err) {
-        if (err instanceof Error && err.message.includes('returned to login page')) {
-          throw err;
+
+        await this.humanType('input[data-testid="ocfEnterTextTextInput"]', challengeValue);
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(5000);
+      }
+
+      // 4. 输入密码
+      console.log('🔑 Step 3: Entering password...');
+      await passwordInput.waitFor({ state: 'visible', timeout: 10000 });
+      await this.humanType('input[name="password"]', this.config.password);
+      await page.keyboard.press('Enter');
+      
+      // 5. 等待登录成功
+      await page.waitForTimeout(5000);
+      await page.waitForLoadState('domcontentloaded');
+
+      if (page.url().includes('/home')) {
+        console.log('✅ Successfully logged in!');
+        this.isLoggedIn = true;
+        
+        // 保存Cookies
+        const cookies = await ctx.cookies();
+        fs.writeFileSync(STATE_PATH, JSON.stringify(cookies, null, 2));
+      } else {
+        // 如果仍然失败，再等一会看看是不是加载慢
+        await page.waitForTimeout(5000);
+        if (page.url().includes('/home')) {
+           console.log('✅ Successfully logged in (delayed)!');
+           this.isLoggedIn = true;
+           const cookies = await ctx.cookies();
+           fs.writeFileSync(STATE_PATH, JSON.stringify(cookies, null, 2));
+        } else {
+           throw new Error(`Login failed. Final URL: ${page.url()}`);
         }
-        console.log('⚠️ Challenge check completed');
       }
 
-      // 6) 输入密码 - 使用多种选择器
-      console.log('🔑 Waiting for password input...');
-      
-      // 尝试多种密码输入选择器
-      const passwordSelectors = [
-        'input[type="password"]',
-        'input[name="password"]',
-        'input[autocomplete="current-password"]',
-        'input[autocomplete*="password"]'
-      ];
-      
-      let passInput = null;
-      for (const selector of passwordSelectors) {
-        try {
-          const input = page.locator(selector).first();
-          if (await input.isVisible({ timeout: 5000 }).catch(() => false)) {
-            passInput = input;
-            console.log(`✅ Password input found with selector: ${selector}`);
-            break;
-          }
-        } catch {}
-      }
-      
-      if (!passInput) {
-        console.log('❌ No password input found. Page might be showing an error or challenge.');
-        
-        // 打印当前页面URL和标题
-        const currentUrl = page.url();
-        const pageTitle = await page.title().catch(() => 'Unknown');
-        console.log('📍 Current URL:', currentUrl);
-        console.log('📄 Page title:', pageTitle);
-        
-        // 尝试查找页面上的所有文本内容（前500个字符）
-        try {
-          const bodyText = await page.locator('body').textContent({ timeout: 3000 });
-          const preview = bodyText?.substring(0, 500).replace(/\s+/g, ' ').trim();
-          console.log('📝 Page content preview:', preview);
-        } catch {}
-        
-        // 检查是否有错误消息
-        try {
-          const errorElements = await page.locator('[role="alert"], .error, [data-testid*="error"]').allTextContents();
-          if (errorElements.length > 0) {
-            console.log('⚠️ Error messages found:', errorElements);
-          }
-        } catch {}
-        
-        throw new Error('Password input not found - check screenshots for details');
-      }
-      
-      console.log('✅ Password input found, filling...');
-      await passInput.fill(this.config.password);
-      await page.waitForTimeout(500);
-
-      // 6) 点击 Log in
-      const loginBtn = page.getByRole('button', { name: /Log in|Sign in|登录|登入/i }).first()
-        .or(page.locator('[data-testid="LoginForm_Login_Button"]').first());
-      await loginBtn.waitFor({ state: 'visible', timeout: 30000 });
-      await loginBtn.click();
-
-      // 7) 等待进入已登录页面
-      await page.waitForLoadState('domcontentloaded', { timeout: 60000 });
-      await page.waitForTimeout(2000);
-
-      this.isLoggedIn = true;
-      console.log('✅ Successfully logged in');
-
-      // ✅ 保存 cookie（下次直接复用）
-      const cookies = await ctx.cookies();
-      fs.writeFileSync(STATE_PATH, JSON.stringify(cookies, null, 2));
-      console.log('💾 Saved session cookies');
     } catch (error) {
-      // ✅ 出错时保存截图
-      try {
-        await page.screenshot({ 
-          path: path.join(__dirname, '../../data/x_login_error.png'), 
-          fullPage: true 
-        });
-        console.log('🧩 Saved debug screenshot: data/x_login_error.png');
-      } catch {}
-      console.error('❌ Failed to login:', error);
+      await this.saveDebugScreenshot('x_login_final_error.png');
+      console.error('❌ Login process failed:', error);
       throw error;
     }
   }
@@ -330,12 +259,10 @@ class TwitterScraperService {
       // 等待推文加载
       await this.page.waitForSelector('article[data-testid="tweet"]', { timeout: 20000 });
 
-      // 滚动加载更多推文
+      // 模拟真人滚动
       for (let i = 0; i < 3; i++) {
-        await this.page.evaluate(() => {
-          window.scrollBy(0, window.innerHeight);
-        });
-        await this.page.waitForTimeout(1000);
+        await this.page.keyboard.press('PageDown');
+        await this.page.waitForTimeout(Math.random() * 1000 + 1000);
       }
 
       // 提取推文数据
@@ -351,9 +278,6 @@ class TwitterScraperService {
             const usernameEl = article.querySelector('div[data-testid="User-Name"] a[role="link"]');
             const tweetUsername = usernameEl?.getAttribute('href')?.replace('/', '') || '';
             
-            // 只抓取目标用户的推文
-            if (tweetUsername !== targetUsername) continue;
-
             // 提取推文内容
             const contentEl = article.querySelector('div[data-testid="tweetText"]');
             const content = contentEl?.textContent || '';
