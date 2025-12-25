@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import { getTwitterApiService } from './twitterApiService';
+import translationService from './translationService';
 
 const db = new Database(path.join(__dirname, '../../data/eagleswap.db'));
 
@@ -18,10 +19,15 @@ interface Tweet {
   username: string;
   user_display_name: string;
   content: string;
+  content_zh?: string;
   published_at: string;
   tweet_url: string;
   is_reply: number;
   reply_to?: string;
+  quoted_tweet_id?: string;
+  quoted_tweet_content?: string;
+  quoted_tweet_content_zh?: string;
+  quoted_tweet_author?: string;
 }
 
 class TwitterMonitorService {
@@ -51,6 +57,7 @@ CREATE TABLE IF NOT EXISTS twitter_posts (
   user_display_name TEXT,
   user_avatar TEXT,
   content TEXT NOT NULL,
+  content_zh TEXT,
   media_urls TEXT,
   tweet_url TEXT,
   retweet_count INTEGER DEFAULT 0,
@@ -59,6 +66,10 @@ CREATE TABLE IF NOT EXISTS twitter_posts (
   is_reply INTEGER DEFAULT 0,
   reply_to_tweet_id TEXT,
   reply_to_username TEXT,
+  quoted_tweet_id TEXT,
+  quoted_tweet_content TEXT,
+  quoted_tweet_content_zh TEXT,
+  quoted_tweet_author TEXT,
   published_at TEXT NOT NULL,
   created_at TEXT DEFAULT (datetime('now'))
 );
@@ -79,6 +90,26 @@ CREATE INDEX IF NOT EXISTS idx_twitter_published ON twitter_posts(published_at D
       // 列已存在，忽略错误
       if (!error.message?.includes('duplicate column')) {
         console.error('Error adding priority column:', error);
+      }
+    }
+    
+    // 添加新的翻译和引用字段
+    const newColumns = [
+      'ALTER TABLE twitter_posts ADD COLUMN content_zh TEXT',
+      'ALTER TABLE twitter_posts ADD COLUMN quoted_tweet_id TEXT',
+      'ALTER TABLE twitter_posts ADD COLUMN quoted_tweet_content TEXT',
+      'ALTER TABLE twitter_posts ADD COLUMN quoted_tweet_content_zh TEXT',
+      'ALTER TABLE twitter_posts ADD COLUMN quoted_tweet_author TEXT'
+    ];
+    
+    for (const sql of newColumns) {
+      try {
+        db.exec(sql);
+      } catch (error: any) {
+        // 列已存在，忽略
+        if (!error.message?.includes('duplicate column')) {
+          console.error('Error adding column:', error);
+        }
       }
     }
     
@@ -153,19 +184,36 @@ CREATE INDEX IF NOT EXISTS idx_twitter_published ON twitter_posts(published_at D
         const exists = db.prepare('SELECT id FROM twitter_posts WHERE tweet_id = ?').get(item.id);
         if (exists) continue;
         
+        // 翻译推文内容（如果是英文）
+        const contentZh = await translationService.translateToZh(item.text);
+        
+        // 处理引用推文（Quote Tweet）
+        let quotedTweetId, quotedTweetContent, quotedTweetContentZh, quotedTweetAuthor;
+        if (item.quotedTweet) {
+          quotedTweetId = item.quotedTweet.id;
+          quotedTweetContent = item.quotedTweet.text;
+          quotedTweetContentZh = await translationService.translateToZh(item.quotedTweet.text);
+          quotedTweetAuthor = item.quotedTweet.author?.userName;
+        }
+        
         tweets.push({
           tweet_id: item.id,
           username: item.author.userName,
           user_display_name: item.author.name,
           content: item.text,
+          content_zh: contentZh,
           published_at: new Date(item.createdAt).toISOString(),
           tweet_url: `https://twitter.com/${item.author.userName}/status/${item.id}`,
           is_reply: item.isReply ? 1 : 0,
-          reply_to: item.inReplyToUsername
+          reply_to: item.inReplyToUsername,
+          quoted_tweet_id: quotedTweetId,
+          quoted_tweet_content: quotedTweetContent,
+          quoted_tweet_content_zh: quotedTweetContentZh,
+          quoted_tweet_author: quotedTweetAuthor
         });
       }
       
-      console.log(`✅ Fetched ${tweets.length} new tweets from @${username}`);
+      console.log(`✅ Fetched ${tweets.length} new tweets from @${username} (with translations)`);
       return tweets;
       
     } catch (error) {
@@ -180,9 +228,10 @@ CREATE INDEX IF NOT EXISTS idx_twitter_published ON twitter_posts(published_at D
   saveTweets(tweets: Tweet[]) {
     const stmt = db.prepare(`
       INSERT OR IGNORE INTO twitter_posts 
-      (tweet_id, username, user_display_name, content, tweet_url, 
-       is_reply, reply_to_username, published_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      (tweet_id, username, user_display_name, content, content_zh, tweet_url, 
+       is_reply, reply_to_username, quoted_tweet_id, quoted_tweet_content, 
+       quoted_tweet_content_zh, quoted_tweet_author, published_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     
     let saved = 0;
@@ -193,9 +242,14 @@ CREATE INDEX IF NOT EXISTS idx_twitter_published ON twitter_posts(published_at D
           tweet.username,
           tweet.user_display_name,
           tweet.content,
+          tweet.content_zh || null,
           tweet.tweet_url,
           tweet.is_reply,
-          tweet.reply_to,
+          tweet.reply_to || null,
+          tweet.quoted_tweet_id || null,
+          tweet.quoted_tweet_content || null,
+          tweet.quoted_tweet_content_zh || null,
+          tweet.quoted_tweet_author || null,
           tweet.published_at
         );
         if (result.changes > 0) saved++;

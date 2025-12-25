@@ -24,6 +24,14 @@ interface Tweet {
   viewCount: number;
   isReply: boolean;
   inReplyToUsername?: string;
+  quotedTweet?: {
+    id: string;
+    text: string;
+    author?: {
+      userName: string;
+      name: string;
+    };
+  };
 }
 
 interface FetchTweetsResponse {
