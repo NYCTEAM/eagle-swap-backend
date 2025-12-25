@@ -131,23 +131,37 @@ class TwitterScraperService {
     if (fs.existsSync(STATE_PATH)) {
       try {
         console.log('🍪 Loading saved session...');
-        const cookies = JSON.parse(fs.readFileSync(STATE_PATH, 'utf8'));
+        const cookiesData = fs.readFileSync(STATE_PATH, 'utf8');
+        const cookies = JSON.parse(cookiesData);
+        console.log(`📦 Loaded ${cookies.length} cookies from file`);
+        
         await ctx.addCookies(cookies);
+        console.log('✅ Cookies added to context');
         
         await page.goto('https://x.com/home', { waitUntil: 'domcontentloaded', timeout: 60000 });
-        await page.waitForTimeout(3000);
+        await page.waitForTimeout(5000);
         
-        // 检查是否真的登录成功
-        if (page.url().includes('/home')) {
-          this.isLoggedIn = true;
-          console.log('✅ Session loaded, login skipped');
-          return;
-        } else {
-          console.log('⚠️ Session expired, clearing cookies...');
-          await ctx.clearCookies();
+        const currentUrl = page.url();
+        console.log(`📍 Current URL: ${currentUrl}`);
+        
+        // 检查是否真的登录成功（更宽松的验证）
+        if (currentUrl.includes('/home') || currentUrl.includes('x.com') && !currentUrl.includes('/login')) {
+          // 额外验证：检查是否有登录后的元素
+          try {
+            await page.waitForSelector('[data-testid="SideNav_AccountSwitcher_Button"]', { timeout: 5000 });
+            this.isLoggedIn = true;
+            console.log('✅ Session loaded successfully, login skipped');
+            return;
+          } catch (e) {
+            console.log('⚠️ Login element not found, session may be invalid');
+          }
         }
-      } catch (err) {
-        console.log('⚠️ Failed to reuse session, continue normal login...');
+        
+        console.log('⚠️ Session validation failed, clearing cookies...');
+        await ctx.clearCookies();
+      } catch (err: any) {
+        console.log(`⚠️ Failed to reuse session: ${err.message}`);
+        console.log('   Continuing with normal login...');
       }
     }
 
