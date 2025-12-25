@@ -1,3 +1,4 @@
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -40,7 +41,6 @@ import multichainNftRouter from './routes/multichainNft';
 import nftMiningRouter from './routes/nft-mining';
 import newsRouter from './routes/news';
 import twitterRouter from './routes/twitter';
-import twitterLoginHelperRouter from './routes/twitter-login-helper';
 import { bridgeRelayerService } from './services/bridgeRelayerService';
 
 const app = express();
@@ -175,7 +175,6 @@ app.use('/api/multichain-nft', multichainNftRouter);
 app.use('/api/nft-mining', nftMiningRouter);
 app.use('/api/news', newsRouter);
 app.use('/api/twitter', twitterRouter);
-app.use('/api/twitter-login-helper', twitterLoginHelperRouter);
 
 // Debug endpoint to view screenshots
 app.get('/debug/screenshot/:name', (req, res) => {
