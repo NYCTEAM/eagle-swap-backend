@@ -24,6 +24,14 @@ try {
     console.log('✅ data 目录已存在');
   }
 
+  // 如果存在预置的 Cookie 文件，复制到 data 目录
+  const presetCookiePath = path.join(__dirname, 'data', 'x_state.json');
+  if (fs.existsSync(presetCookiePath)) {
+    console.log('✅ 发现预置的 Twitter Cookie 文件');
+  } else {
+    console.log('⚠️ 未发现预置的 Cookie 文件，将使用自动登录');
+  }
+
   console.log('✅ 启动检查完成\n');
   process.exit(0);
 
