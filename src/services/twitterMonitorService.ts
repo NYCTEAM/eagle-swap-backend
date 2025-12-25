@@ -125,7 +125,14 @@ CREATE INDEX IF NOT EXISTS idx_twitter_published ON twitter_posts(published_at D
     const nitterInstances = [
       'nitter.poast.org',
       'nitter.privacydev.net',
-      'nitter.net'
+      'nitter.net',
+      'nitter.it',
+      'nitter.unixfox.eu',
+      'nitter.1d4.us',
+      'nitter.kavin.rocks',
+      'nitter.fdn.fr',
+      'nitter.namazso.eu',
+      'nitter.nixnet.services'
     ];
     
     for (const instance of nitterInstances) {
