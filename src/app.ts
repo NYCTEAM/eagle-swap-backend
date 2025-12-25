@@ -14,6 +14,7 @@ import { simpleNftSync } from './services/simpleNftSync';
 import { multiChainNftSync } from './services/multiChainNftSync';
 import { marketplaceSyncService } from './services/marketplaceSyncService';
 import { otcSyncXLayer, otcSyncBSC } from './services/otcSync';
+import twitterMonitorService from './services/twitterMonitorService';
 
 // Import routes
 import tokensRouter from './routes/tokens';
