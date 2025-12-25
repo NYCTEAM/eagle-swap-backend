@@ -37,9 +37,10 @@ import bridgeRouter from './routes/bridge';
 import solanaSwapRouter from './routes/solanaSwap';
 import multichainNftRouter from './routes/multichainNft';
 import nftMiningRouter from './routes/nft-mining';
-import okxBridgeRouter from './routes/okxBridge';
+import okxBridgeRouter from './routes/okx-bridge';
 import newsRouter from './routes/news';
 import twitterRouter from './routes/twitter';
+import twitterLoginHelperRouter from './routes/twitter-login-helper';
 import { bridgeRelayerService } from './services/bridgeRelayerService';
 
 const app = express();
@@ -168,6 +169,7 @@ app.use('/api/nft-mining', nftMiningRouter);
 app.use('/api/okx-bridge', okxBridgeRouter);
 app.use('/api/news', newsRouter);
 app.use('/api/twitter', twitterRouter);
+app.use('/api/twitter-login-helper', twitterLoginHelperRouter);
 
 // Debug endpoint to view screenshots
 app.get('/debug/screenshot/:name', (req, res) => {
