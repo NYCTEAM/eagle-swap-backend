@@ -154,11 +154,21 @@ router.get('/account/:username', async (req, res) => {
 /**
  * GET /api/twitter/all
  * 获取所有推文（公共时间线）
+ * 支持按账号筛选：?username=cz_binance
  */
 router.get('/all', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit as string) || 50;
-    const tweets = twitterMonitorService.getAllTweets(limit);
+    const username = req.query.username as string;
+    
+    let tweets;
+    if (username) {
+      // 按账号筛选
+      tweets = twitterMonitorService.getAccountTweets(username, limit);
+    } else {
+      // 所有推文
+      tweets = twitterMonitorService.getAllTweets(limit);
+    }
     
     res.json({
       success: true,
@@ -169,6 +179,33 @@ router.get('/all', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch tweets'
+    });
+  }
+});
+
+/**
+ * GET /api/twitter/popular-accounts
+ * 获取热门账号列表
+ */
+router.get('/popular-accounts', async (req, res) => {
+  try {
+    const popularAccounts = [
+      { username: 'cz_binance', displayName: 'CZ 🔶 BNB', avatar: null },
+      { username: 'binance', displayName: 'Binance', avatar: null },
+      { username: 'elonmusk', displayName: 'Elon Musk', avatar: null },
+      { username: 'VitalikButerin', displayName: 'Vitalik Buterin', avatar: null },
+      { username: 'heyibinance', displayName: 'He Yi', avatar: null }
+    ];
+    
+    res.json({
+      success: true,
+      data: popularAccounts
+    });
+  } catch (error) {
+    console.error('Error fetching popular accounts:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch popular accounts'
     });
   }
 });

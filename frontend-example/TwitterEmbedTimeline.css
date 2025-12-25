@@ -1,0 +1,346 @@
+/**
+ * Twitter 嵌入式时间线样式
+ */
+
+.twitter-embed-timeline {
+  max-width: 600px;
+  margin: 0 auto;
+  background: #ffffff;
+  min-height: 100vh;
+}
+
+/* 头部 */
+.timeline-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid #eff3f4;
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.timeline-header h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f1419;
+  margin: 0;
+}
+
+.timeline-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.toggle-translation-btn,
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  border: 1px solid #cfd9de;
+  background: #ffffff;
+  color: #0f1419;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toggle-translation-btn:hover,
+.refresh-btn:hover {
+  background-color: #f7f9f9;
+}
+
+.refresh-btn svg {
+  fill: currentColor;
+}
+
+/* 账号筛选标签 */
+.account-filters {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #eff3f4;
+  overflow-x: auto;
+  scrollbar-width: none;
+  background: #ffffff;
+}
+
+.account-filters::-webkit-scrollbar {
+  display: none;
+}
+
+.account-filter-btn {
+  padding: 8px 16px;
+  border: 1px solid #cfd9de;
+  background: #ffffff;
+  color: #0f1419;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.account-filter-btn:hover {
+  background-color: #f7f9f9;
+}
+
+.account-filter-btn.active {
+  background: #1d9bf0;
+  color: #ffffff;
+  border-color: #1d9bf0;
+}
+
+/* 内容区域 */
+.timeline-content {
+  padding: 0;
+}
+
+.tweet-embed-wrapper {
+  border-bottom: 1px solid #eff3f4;
+  background: #ffffff;
+}
+
+/* Twitter 嵌入容器 */
+.twitter-embed-container {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.twitter-embed-container .twitter-tweet {
+  margin: 0 !important;
+  width: 100% !important;
+  max-width: 600px !important;
+}
+
+/* 中文翻译 */
+.tweet-translation {
+  padding: 12px 16px;
+  background: #f7f9f9;
+  border-top: 1px solid #eff3f4;
+}
+
+.translation-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1d9bf0;
+  margin-bottom: 8px;
+}
+
+.translation-content {
+  font-size: 15px;
+  line-height: 20px;
+  color: #536471;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* 加载状态 */
+.timeline-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #536471;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #eff3f4;
+  border-top-color: #1d9bf0;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 错误状态 */
+.timeline-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #536471;
+}
+
+.timeline-error p {
+  margin-bottom: 16px;
+  font-size: 15px;
+}
+
+.retry-btn {
+  padding: 10px 24px;
+  background: #1d9bf0;
+  color: #ffffff;
+  border: none;
+  border-radius: 20px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.retry-btn:hover {
+  background: #1a8cd8;
+}
+
+/* 空状态 */
+.timeline-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #536471;
+  text-align: center;
+}
+
+.timeline-empty p {
+  font-size: 15px;
+  margin: 8px 0;
+}
+
+/* 底部 */
+.timeline-footer {
+  padding: 20px;
+  text-align: center;
+  border-top: 1px solid #eff3f4;
+}
+
+.load-more-btn {
+  padding: 12px 32px;
+  background: #ffffff;
+  color: #1d9bf0;
+  border: 1px solid #1d9bf0;
+  border-radius: 20px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.load-more-btn:hover {
+  background: #e8f5fd;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .twitter-embed-timeline {
+    border-left: none;
+    border-right: none;
+  }
+
+  .timeline-header {
+    padding: 12px 16px;
+  }
+
+  .timeline-header h2 {
+    font-size: 18px;
+  }
+
+  .timeline-controls {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .toggle-translation-btn,
+  .refresh-btn {
+    padding: 6px 12px;
+    font-size: 13px;
+  }
+}
+
+/* 暗色模式 */
+@media (prefers-color-scheme: dark) {
+  .twitter-embed-timeline {
+    background: #000000;
+  }
+
+  .timeline-header {
+    background: rgba(0, 0, 0, 0.95);
+    border-color: #2f3336;
+  }
+
+  .timeline-header h2 {
+    color: #e7e9ea;
+  }
+
+  .toggle-translation-btn,
+  .refresh-btn,
+  .account-filter-btn {
+    background: #000000;
+    border-color: #2f3336;
+    color: #e7e9ea;
+  }
+
+  .toggle-translation-btn:hover,
+  .refresh-btn:hover,
+  .account-filter-btn:hover {
+    background-color: #16181c;
+  }
+
+  .account-filter-btn.active {
+    background: #1d9bf0;
+    color: #ffffff;
+  }
+
+  .account-filters {
+    background: #000000;
+    border-color: #2f3336;
+  }
+
+  .tweet-embed-wrapper {
+    background: #000000;
+    border-color: #2f3336;
+  }
+
+  .tweet-translation {
+    background: #16181c;
+    border-color: #2f3336;
+  }
+
+  .translation-content {
+    color: #71767b;
+  }
+
+  .timeline-loading,
+  .timeline-error,
+  .timeline-empty {
+    color: #71767b;
+  }
+
+  .loading-spinner {
+    border-color: #2f3336;
+    border-top-color: #1d9bf0;
+  }
+
+  .load-more-btn {
+    background: #000000;
+    border-color: #1d9bf0;
+  }
+
+  .load-more-btn:hover {
+    background: #031018;
+  }
+
+  .timeline-footer {
+    border-color: #2f3336;
+  }
+}
