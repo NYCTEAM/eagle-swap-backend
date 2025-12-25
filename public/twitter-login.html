@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Twitter Login Helper - Eagle Swap</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      max-width: 800px;
+      width: 100%;
+      padding: 40px;
+    }
+    
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+      font-size: 28px;
+    }
+    
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+    
+    .step {
+      background: #f8f9fa;
+      border-left: 4px solid #667eea;
+      padding: 20px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+    }
+    
+    .step-number {
+      display: inline-block;
+      background: #667eea;
+      color: white;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      text-align: center;
+      line-height: 30px;
+      margin-right: 10px;
+      font-weight: bold;
+    }
+    
+    .step h3 {
+      display: inline-block;
+      color: #333;
+      font-size: 18px;
+      margin-bottom: 10px;
+    }
+    
+    .step p {
+      color: #666;
+      line-height: 1.6;
+      margin-top: 10px;
+    }
+    
+    .code-block {
+      background: #2d2d2d;
+      color: #f8f8f2;
+      padding: 15px;
+      border-radius: 8px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      overflow-x: auto;
+      margin: 10px 0;
+    }
+    
+    button {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 12px 30px;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin-top: 10px;
+    }
+    
+    button:hover {
+      background: #5568d3;
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+    
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    .success {
+      background: #d4edda;
+      border: 1px solid #c3e6cb;
+      color: #155724;
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 20px;
+      display: none;
+    }
+    
+    .error {
+      background: #f8d7da;
+      border: 1px solid #f5c6cb;
+      color: #721c24;
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 20px;
+      display: none;
+    }
+    
+    .warning {
+      background: #fff3cd;
+      border: 1px solid #ffeaa7;
+      color: #856404;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    
+    a {
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🐦 Twitter Login Helper</h1>
+    <p class="subtitle">Save your Twitter cookies to Eagle Swap backend</p>
+    
+    <div class="warning">
+      ⚠️ <strong>Important:</strong> This page must be opened on the same domain as Twitter (x.com) to access cookies. 
+      Please follow the instructions below carefully.
+    </div>
+    
+    <div class="step">
+      <span class="step-number">1</span>
+      <h3>Open Twitter and Login</h3>
+      <p>Open <a href="https://x.com" target="_blank">https://x.com</a> in a new tab and login to your account if you haven't already.</p>
+    </div>
+    
+    <div class="step">
+      <span class="step-number">2</span>
+      <h3>Open Browser Console</h3>
+      <p>On the Twitter page, press <strong>F12</strong> (or right-click → Inspect) to open Developer Tools, then click on the <strong>Console</strong> tab.</p>
+    </div>
+    
+    <div class="step">
+      <span class="step-number">3</span>
+      <h3>Copy and Paste This Code</h3>
+      <p>Copy the code below and paste it into the Console, then press Enter:</p>
+      <div class="code-block">
+// Extract all cookies from x.com
+const cookies = document.cookie.split(';').map(c => {
+  const [name, value] = c.trim().split('=');
+  return { name, value };
+});
+
+// Send to Eagle Swap backend
+fetch('https://api.eagleswap.llc/api/admin/update-twitter-cookies', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(cookies)
+})
+.then(r => r.json())
+.then(data => {
+  if (data.success) {
+    alert('✅ Cookies saved successfully! You can now close this tab.');
+  } else {
+    alert('❌ Failed to save cookies: ' + (data.error || 'Unknown error'));
+  }
+})
+.catch(err => {
+  alert('❌ Network error: ' + err.message);
+});
+      </div>
+    </div>
+    
+    <div class="step">
+      <span class="step-number">4</span>
+      <h3>Wait for Confirmation</h3>
+      <p>You should see an alert message saying "✅ Cookies saved successfully!". The backend will now use your login session.</p>
+    </div>
+    
+    <div class="step">
+      <span class="step-number">5</span>
+      <h3>Restart Twitter Scraper</h3>
+      <p>The Twitter scraper will automatically use the saved cookies on the next run (every 5 minutes), or you can restart the backend to apply immediately.</p>
+    </div>
+    
+    <div id="successMessage" class="success"></div>
+    <div id="errorMessage" class="error"></div>
+  </div>
+</body>
+</html>

@@ -190,23 +190,46 @@ app.get('/debug/screenshot/:name', (req, res) => {
   res.sendFile(filePath);
 });
 
-// ✅ Manual Cookie Upload Endpoint
+// Manual cookie upload endpoint
 app.post('/api/admin/update-twitter-cookies', (req, res) => {
-  const fs = require('fs');
-  const path = require('path');
-  const STATE_PATH = path.join(__dirname, '../data/x_state.json');
-  
   try {
+    const fs = require('fs');
+    const path = require('path');
+    const STATE_PATH = path.join(__dirname, '../data/x_state.json');
+    
     const cookies = req.body;
     
     if (!Array.isArray(cookies)) {
       return res.status(400).json({ success: false, error: 'Invalid format: cookies must be an array' });
     }
     
-    fs.writeFileSync(STATE_PATH, JSON.stringify(cookies, null, 2));
-    console.log('💾 Manually updated Twitter cookies via API');
+    // 检测是否是简单格式 {name, value} 并转换为 Playwright 格式
+    const playwrightCookies = cookies.map(cookie => {
+      // 如果已经是 Playwright 格式（包含 domain 字段），直接返回
+      if (cookie.domain) {
+        return cookie;
+      }
+      
+      // 否则转换简单格式为 Playwright 格式
+      return {
+        name: cookie.name,
+        value: cookie.value,
+        domain: '.x.com',
+        path: '/',
+        secure: true,
+        httpOnly: false,
+        sameSite: 'Lax'
+      };
+    });
     
-    res.json({ success: true, message: 'Cookies saved successfully. Restart the server or wait for next scraper run.' });
+    fs.writeFileSync(STATE_PATH, JSON.stringify(playwrightCookies, null, 2));
+    console.log(` Manually updated ${playwrightCookies.length} Twitter cookies via API`);
+    
+    res.json({ 
+      success: true, 
+      message: `Saved ${playwrightCookies.length} cookies successfully. Restart the server or wait for next scraper run.`,
+      cookieCount: playwrightCookies.length
+    });
   } catch (error: any) {
     console.error('Failed to save cookies:', error);
     res.status(500).json({ success: false, error: error.message });
