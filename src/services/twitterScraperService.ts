@@ -152,36 +152,71 @@ class TwitterScraperService {
       console.log('🔍 Checking for challenge step...');
       try {
         // 等待一下看是否出现挑战页面
-        await page.waitForTimeout(2000);
+        await page.waitForTimeout(3000);
+        
+        // 检查是否回到了登录首页（说明验证失败）
+        const loginPageIndicator = page.locator('text=/Sign in to X|Log in to X/i');
+        if (await loginPageIndicator.isVisible({ timeout: 2000 }).catch(() => false)) {
+          console.log('❌ Returned to login page - username or verification failed');
+          console.log('💡 Possible issues:');
+          console.log('   1. Username does not exist or is incorrect');
+          console.log('   2. Account is locked or suspended');
+          console.log('   3. Email/phone verification failed');
+          throw new Error('Login failed - returned to login page after username/verification');
+        }
         
         const challengeInput = page.locator('input[name="text"]').first();
         if (await challengeInput.isVisible({ timeout: 3000 }).catch(() => false)) {
           console.log('⚠️ Challenge step detected - additional verification required.');
           
-          // 尝试使用email或phone
+          // 获取页面提示文本
+          try {
+            const pageText = await page.locator('body').textContent({ timeout: 2000 });
+            const isEmailChallenge = pageText?.toLowerCase().includes('email');
+            const isPhoneChallenge = pageText?.toLowerCase().includes('phone');
+            console.log(`📋 Challenge type: ${isEmailChallenge ? 'Email' : isPhoneChallenge ? 'Phone' : 'Unknown'}`);
+          } catch {}
+          
+          // 获取页面提示文本，判断是需要邮箱还是手机
           let verificationValue = this.config.email || this.config.phone || this.config.username;
+          try {
+            const pageText = await page.locator('body').textContent({ timeout: 2000 });
+            const lowerText = pageText?.toLowerCase() || '';
+            
+            // 优先匹配页面要求的类型
+            if (lowerText.includes('phone') && this.config.phone) {
+              console.log('� Page asks for phone, using phone number');
+              verificationValue = this.config.phone;
+            } else if (lowerText.includes('email') && this.config.email) {
+              console.log('� Page asks for email, using email address');
+              verificationValue = this.config.email;
+            } else {
+              console.log('⚠️ Could not detect specific requirement, using default verification value');
+            }
+          } catch {}
           
-          if (this.config.email) {
-            console.log('📧 Using email for verification');
-          } else if (this.config.phone) {
-            console.log('📱 Using phone for verification');
-          } else {
-            console.log('⚠️ No email/phone configured, trying username again');
-            console.log('💡 Tip: Set TWITTER_EMAIL or TWITTER_PHONE environment variable');
-          }
-          
+          console.log(`📝 Filling verification with: ${verificationValue}`);
           await challengeInput.fill(verificationValue);
           await page.waitForTimeout(1000);
           
+          // 保存验证步骤截图
+          try {
+            await page.screenshot({ path: path.join(__dirname, '../../data/x_verification_step.png'), fullPage: true });
+            console.log('📸 Saved verification step screenshot');
+          } catch {}
+          
           const nextBtn2 = page.getByRole('button', { name: /Next|下一步|继续/i }).first();
           await nextBtn2.click();
-          await page.waitForTimeout(5000);
+          await page.waitForTimeout(8000); // 增加等待时间
           
-          console.log('✅ Challenge step completed');
+          console.log('✅ Challenge step completed, waiting for next page...');
         } else {
           console.log('✅ No challenge step detected');
         }
       } catch (err) {
+        if (err instanceof Error && err.message.includes('returned to login page')) {
+          throw err;
+        }
         console.log('⚠️ Challenge check completed');
       }
 
@@ -210,6 +245,28 @@ class TwitterScraperService {
       
       if (!passInput) {
         console.log('❌ No password input found. Page might be showing an error or challenge.');
+        
+        // 打印当前页面URL和标题
+        const currentUrl = page.url();
+        const pageTitle = await page.title().catch(() => 'Unknown');
+        console.log('📍 Current URL:', currentUrl);
+        console.log('📄 Page title:', pageTitle);
+        
+        // 尝试查找页面上的所有文本内容（前500个字符）
+        try {
+          const bodyText = await page.locator('body').textContent({ timeout: 3000 });
+          const preview = bodyText?.substring(0, 500).replace(/\s+/g, ' ').trim();
+          console.log('📝 Page content preview:', preview);
+        } catch {}
+        
+        // 检查是否有错误消息
+        try {
+          const errorElements = await page.locator('[role="alert"], .error, [data-testid*="error"]').allTextContents();
+          if (errorElements.length > 0) {
+            console.log('⚠️ Error messages found:', errorElements);
+          }
+        } catch {}
+        
         throw new Error('Password input not found - check screenshots for details');
       }
       
