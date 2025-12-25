@@ -20,7 +20,7 @@ except ImportError:
     sys.exit(1)
 
 
-async def login_twitter(username: str, email: str, password: str, cookies_file: str):
+async def login_twitter(username: str, email: str, password: str, cookies_file: str, proxy: str = None):
     """
     使用 Twikit 登录 Twitter
     
@@ -29,10 +29,11 @@ async def login_twitter(username: str, email: str, password: str, cookies_file: 
         email: Twitter 邮箱
         password: Twitter 密码
         cookies_file: Cookie 保存路径
+        proxy: 代理地址 (可选)，格式: http://host:port 或 socks5://host:port
     """
     try:
         # 初始化客户端
-        client = Client('en-US')
+        client = Client('en-US', proxy=proxy)
         
         # 尝试登录
         await client.login(
@@ -122,7 +123,7 @@ async def main():
         if len(sys.argv) < 6:
             print(json.dumps({
                 "success": False,
-                "error": "Usage: python twitter-login-twikit.py login <username> <email> <password> <cookies_file>"
+                "error": "Usage: python twitter-login-twikit.py login <username> <email> <password> <cookies_file> [proxy]"
             }))
             sys.exit(1)
         
@@ -130,8 +131,9 @@ async def main():
         email = sys.argv[3]
         password = sys.argv[4]
         cookies_file = sys.argv[5]
+        proxy = sys.argv[6] if len(sys.argv) > 6 else None
         
-        result = await login_twitter(username, email, password, cookies_file)
+        result = await login_twitter(username, email, password, cookies_file, proxy)
         print(json.dumps(result, indent=2))
         
     elif command == "verify":
