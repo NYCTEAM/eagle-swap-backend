@@ -417,7 +417,7 @@ router.get('/request/:id', async (req: Request, res: Response) => {
     res.json({
       success: true,
       data: {
-        ...request,
+        ...(request as any),
         voters
       }
     });
