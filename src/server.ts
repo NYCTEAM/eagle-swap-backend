@@ -54,8 +54,7 @@ const startServer = async () => {
       const twitterUsername = process.env.TWITTER_USERNAME;
       const twitterPassword = process.env.TWITTER_PASSWORD;
       
-      // 临时禁用Playwright，等浏览器安装完成后再启用
-      if (false && twitterUsername && twitterPassword) {
+      if (twitterUsername && twitterPassword) {
         console.log('🔐 Using Puppeteer Twitter Scraper (with login)');
         
         // 创建Puppeteer scraper实例
