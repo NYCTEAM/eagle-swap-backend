@@ -197,8 +197,8 @@ CREATE INDEX IF NOT EXISTS idx_twitter_published ON twitter_posts(published_at D
           quotedTweetAuthor = item.quotedTweet.author?.userName;
         }
         
-        // 获取头像 URL
-        const avatarUrl = item.author.avatar || item.author.profileImageUrl || null;
+        // 获取头像 URL（TwitterAPI.io 使用 profilePicture 字段）
+        const avatarUrl = (item.author as any).profilePicture || item.author.avatar || item.author.profileImageUrl || null;
         
         tweets.push({
           tweet_id: item.id,
