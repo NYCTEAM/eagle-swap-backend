@@ -56,16 +56,16 @@ const startServer = async () => {
         console.error('❌ Failed to monitor Twitter:', err);
       });
       
-      // Auto-monitor Twitter every 10 minutes
+      // Auto-monitor Twitter every 1 minute
       setInterval(() => {
         twitterMonitorService.monitorAllFollows().then(count => {
           console.log(`✅ Auto Twitter monitor completed: ${count} tweets`);
         }).catch(err => {
           console.error('❌ Failed to monitor Twitter:', err);
         });
-      }, 10 * 60 * 1000); // 每10分钟
+      }, 1 * 60 * 1000); // 每1分钟
       
-      console.log('✅ Twitter monitor auto-sync started (every 10 minutes)');
+      console.log('✅ Twitter monitor auto-sync started (every 1 minute)');
     } catch (error) {
       console.error('❌ Failed to initialize Twitter monitor service:', error);
     }
