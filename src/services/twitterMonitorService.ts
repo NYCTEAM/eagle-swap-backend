@@ -119,72 +119,67 @@ CREATE INDEX IF NOT EXISTS idx_twitter_published ON twitter_posts(published_at D
   }
 
   /**
-   * 使用Nitter RSS获取推文（免费，无需API）
+   * 使用 Twikit 获取推文（免费，无需API）
+   */
+  async fetchTweetsFromTwikit(username: string): Promise<Tweet[]> {
+    const { exec } = require('child_process');
+    const { promisify } = require('util');
+    const path = require('path');
+    const execAsync = promisify(exec);
+    
+    try {
+      const scriptPath = path.join(__dirname, '../../scripts/fetch-tweets-twikit.py');
+      const cookiesFile = path.join(__dirname, '../../data/twitter_cookies.json');
+      const command = `python3 "${scriptPath}" "${username}" "${cookiesFile}" 50`;
+      
+      console.log(`🐦 Fetching tweets for @${username} using Twikit...`);
+      
+      const { stdout } = await execAsync(command, {
+        maxBuffer: 10 * 1024 * 1024 // 10MB buffer
+      });
+      
+      const result = JSON.parse(stdout);
+      
+      if (!result.success) {
+        console.error(`❌ Twikit failed for @${username}: ${result.error}`);
+        return [];
+      }
+      
+      const tweets: Tweet[] = [];
+      
+      for (const item of result.tweets) {
+        // 检查是否已存在
+        const exists = db.prepare('SELECT id FROM twitter_posts WHERE tweet_id = ?').get(item.id);
+        if (exists) continue;
+        
+        tweets.push({
+          tweet_id: item.id,
+          username: username,
+          user_display_name: item.user.name,
+          content: item.text,
+          published_at: new Date(item.created_at).toISOString(),
+          tweet_url: `https://twitter.com/${username}/status/${item.id}`,
+          is_reply: 0,
+          reply_to: undefined
+        });
+      }
+      
+      console.log(`✅ Fetched ${tweets.length} new tweets from @${username}`);
+      return tweets;
+      
+    } catch (error) {
+      console.error(`❌ Twikit error for @${username}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * @deprecated 使用 fetchTweetsFromTwikit 替代
+   * Nitter 实例已全部失效
    */
   async fetchTweetsFromNitter(username: string): Promise<Tweet[]> {
-    const nitterInstances = [
-      'nitter.poast.org',
-      'nitter.privacydev.net',
-      'nitter.net',
-      'nitter.it',
-      'nitter.unixfox.eu',
-      'nitter.1d4.us',
-      'nitter.kavin.rocks',
-      'nitter.fdn.fr',
-      'nitter.namazso.eu',
-      'nitter.nixnet.services'
-    ];
-    
-    for (const instance of nitterInstances) {
-      try {
-        const url = `https://${instance}/${username}/rss`;
-        console.log(`🐦 Fetching tweets from ${url}...`);
-        
-        const feed = await rssParser.parseURL(url);
-        const tweets: Tweet[] = [];
-        
-        for (const item of feed.items.slice(0, 20)) {
-          if (!item.link) continue;
-          
-          // 提取推文ID
-          const tweetId = item.link.split('/').pop() || '';
-          
-          // 检查是否已存在
-          const exists = db.prepare('SELECT id FROM twitter_posts WHERE tweet_id = ?').get(tweetId);
-          if (exists) continue;
-          
-          // 检查是否是回复
-          const isReply = item.title?.startsWith('R to @') || item.content?.includes('Re:') || false;
-          let replyTo = null;
-          
-          if (isReply && item.title) {
-            const match = item.title.match(/R to @(\w+)/);
-            if (match) replyTo = match[1];
-          }
-          
-          tweets.push({
-            tweet_id: tweetId,
-            username: username,
-            user_display_name: feed.title || username,
-            content: item.contentSnippet || item.content || '',
-            published_at: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
-            tweet_url: item.link,
-            is_reply: isReply ? 1 : 0,
-            reply_to: replyTo || undefined
-          });
-        }
-        
-        console.log(`✅ Fetched ${tweets.length} new tweets from @${username}`);
-        return tweets;
-        
-      } catch (error) {
-        console.log(`Failed to fetch from ${instance}, trying next...`);
-        continue;
-      }
-    }
-    
-    console.error(`❌ All Nitter instances failed for @${username}`);
-    return [];
+    console.warn(`⚠️ fetchTweetsFromNitter is deprecated. Use fetchTweetsFromTwikit instead.`);
+    return this.fetchTweetsFromTwikit(username);
   }
 
   /**
@@ -238,7 +233,7 @@ CREATE INDEX IF NOT EXISTS idx_twitter_published ON twitter_posts(published_at D
       let totalNewTweets = 0;
       
       for (const follow of follows) {
-        const tweets = await this.fetchTweetsFromNitter(follow.twitter_username);
+        const tweets = await this.fetchTweetsFromTwikit(follow.twitter_username);
         const saved = this.saveTweets(tweets);
         totalNewTweets += saved;
         

@@ -60,7 +60,7 @@ const startServer = async () => {
       if (disableTwitterLogin) {
         console.log('⚠️ Twitter auto-login is disabled (DISABLE_TWITTER_LOGIN=true)');
         console.log('💡 You can manually upload cookies via /api/admin/update-twitter-cookies');
-        console.log('📡 Using Nitter RSS as fallback...');
+        console.log('📡 Using Twikit as fallback (requires cookies)...');
       } else if (twitterUsername && twitterPassword) {
         console.log('🔐 Using Puppeteer Twitter Scraper (with login)');
         
@@ -87,7 +87,7 @@ const startServer = async () => {
           })
           .catch(err => {
             console.error('❌ Failed to initialize Twitter scraper:', err);
-            console.log('⚠️ Falling back to Nitter RSS...');
+            console.log('⚠️ Falling back to Twikit...');
           });
         
         // 定时抓取（每5分钟）
@@ -103,9 +103,9 @@ const startServer = async () => {
         
         console.log('✅ Twitter scraper auto-sync started (every 5 minutes)');
       } else {
-        console.log('⚠️ Twitter credentials not found, using Nitter RSS (may be unstable)');
+        console.log('⚠️ Twitter credentials not found, using Twikit (requires cookies)');
         
-        // 回退到Nitter方式
+        // 使用 Twikit 方式
         twitterMonitorService.monitorAllFollows().then(count => {
           console.log(`✅ Initial Twitter monitor completed: ${count} tweets`);
         }).catch(err => {
