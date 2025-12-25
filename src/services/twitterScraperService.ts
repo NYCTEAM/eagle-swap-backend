@@ -98,49 +98,68 @@ class TwitterScraperService {
     try {
       console.log('🔐 Logging in to X...');
       await page.goto('https://x.com/i/flow/login', { waitUntil: 'domcontentloaded', timeout: 60000 });
-      await page.waitForTimeout(2000);
+      console.log('✅ Login page loaded');
+      await page.waitForTimeout(3000);
 
       // 1) 处理可能的 cookie 弹窗
       try {
         const cookieBtn = page.getByRole('button', { name: /Accept|Agree|接受|同意/i });
         if (await cookieBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+          console.log('🍪 Clicking cookie consent...');
           await cookieBtn.click();
           await page.waitForTimeout(800);
         }
       } catch {}
 
       // 2) 输入用户名
+      console.log('📝 Waiting for username input...');
       const userInput = page.locator('input[autocomplete="username"]').first()
         .or(page.locator('input[name="text"]').first());
       await userInput.waitFor({ state: 'visible', timeout: 30000 });
+      console.log('✅ Username input found, filling...');
       await userInput.fill(this.config.username);
-      await page.waitForTimeout(300);
+      await page.waitForTimeout(500);
 
       // 3) 点击 Next（中英兼容）
+      console.log('👆 Looking for Next button...');
       const nextBtn = page.getByRole('button', { name: /Next|下一步|继续/i }).first();
       await nextBtn.waitFor({ state: 'visible', timeout: 30000 });
+      console.log('✅ Next button found, clicking...');
       await nextBtn.click();
-      await page.waitForTimeout(1200);
+      await page.waitForTimeout(2000);
+
+      // 保存中间截图
+      try {
+        await page.screenshot({ path: path.join(__dirname, '../../data/x_after_username.png') });
+        console.log('📸 Saved screenshot after username step');
+      } catch {}
 
       // 4) 处理可能的验证挑战（email/phone）
+      console.log('🔍 Checking for challenge step...');
       try {
         const challengeInput = page.locator('input[name="text"]').first();
         const challengeTitle = page.locator('text=/Enter your phone|Enter your email|验证|确认/i');
-        if (await challengeInput.isVisible({ timeout: 3000 }).catch(() => false) && 
-            await challengeTitle.isVisible({ timeout: 3000 }).catch(() => false)) {
+        if (await challengeInput.isVisible({ timeout: 5000 }).catch(() => false) && 
+            await challengeTitle.isVisible({ timeout: 5000 }).catch(() => false)) {
           console.log('⚠️ Challenge step detected (email/phone).');
           await challengeInput.fill(this.config.username);
           const nextBtn2 = page.getByRole('button', { name: /Next|下一步|继续/i }).first();
           await nextBtn2.click();
-          await page.waitForTimeout(1200);
+          await page.waitForTimeout(2000);
+        } else {
+          console.log('✅ No challenge step detected');
         }
-      } catch {}
+      } catch (err) {
+        console.log('⚠️ Challenge check error (continuing):', err);
+      }
 
       // 5) 输入密码
+      console.log('🔑 Waiting for password input...');
       const passInput = page.locator('input[type="password"], input[name="password"]').first();
-      await passInput.waitFor({ state: 'visible', timeout: 30000 });
+      await passInput.waitFor({ state: 'visible', timeout: 40000 });
+      console.log('✅ Password input found, filling...');
       await passInput.fill(this.config.password);
-      await page.waitForTimeout(300);
+      await page.waitForTimeout(500);
 
       // 6) 点击 Log in
       const loginBtn = page.getByRole('button', { name: /Log in|Sign in|登录|登入/i }).first()
