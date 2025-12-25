@@ -43,9 +43,6 @@ CREATE TABLE IF NOT EXISTS user_twitter_follows (
   UNIQUE(user_address, twitter_username)
 );
 
--- 添加 priority 列（如果不存在）
-ALTER TABLE user_twitter_follows ADD COLUMN priority INTEGER DEFAULT 2;
-
 -- Twitter推文表（扩展）
 CREATE TABLE IF NOT EXISTS twitter_posts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,6 +70,18 @@ CREATE INDEX IF NOT EXISTS idx_twitter_published ON twitter_posts(published_at D
     `;
     
     db.exec(schema);
+    
+    // 安全地添加 priority 列（如果旧表不存在此列）
+    try {
+      db.exec('ALTER TABLE user_twitter_follows ADD COLUMN priority INTEGER DEFAULT 2');
+      console.log('✅ Added priority column to existing table');
+    } catch (error: any) {
+      // 列已存在，忽略错误
+      if (!error.message?.includes('duplicate column')) {
+        console.error('Error adding priority column:', error);
+      }
+    }
+    
     console.log('✅ Twitter monitor database initialized');
   }
 
