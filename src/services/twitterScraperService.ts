@@ -113,14 +113,20 @@ class TwitterScraperService {
         }
       } catch {}
 
-      // 2) 输入用户名
+      // 2) 输入用户名或邮箱
       console.log('📝 Waiting for username input...');
-      const userInput = page.locator('input[autocomplete="username"]').first()
-        .or(page.locator('input[name="text"]').first());
-      await userInput.waitFor({ state: 'visible', timeout: 30000 });
-      console.log('✅ Username input found, filling...');
-      await userInput.fill(this.config.username);
+      const userInput = page.locator('input[autocomplete="username"]').first();
+      await userInput.waitFor({ state: 'visible', timeout: 10000 });
+      
+      // 优先尝试使用邮箱登录，因为这通常更稳定
+      const loginId = this.config.email || this.config.username;
+      console.log(`✅ Username input found, filling with ${this.config.email ? 'email' : 'username'}...`);
+      
+      // 模拟人类输入速度
+      await userInput.click();
       await page.waitForTimeout(500);
+      await userInput.type(loginId, { delay: 100 });
+      await page.waitForTimeout(1000);
 
       // 3) 点击 Next（中英兼容）
       console.log('👆 Looking for Next button...');
