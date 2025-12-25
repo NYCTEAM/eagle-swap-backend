@@ -24,7 +24,27 @@ router.post('/follow', async (req, res) => {
       displayName
     );
     
-    res.json(result);
+    if (result.success) {
+      // 立即抓取该账号的最新推文
+      console.log(`🐦 Immediately fetching tweets for @${twitterUsername}...`);
+      
+      twitterMonitorService.fetchTweetsFromNitter(twitterUsername.replace('@', ''))
+        .then(tweets => {
+          const saved = twitterMonitorService.saveTweets(tweets);
+          console.log(`✅ Fetched and saved ${saved} tweets for @${twitterUsername}`);
+        })
+        .catch(err => {
+          console.error(`❌ Failed to fetch tweets for @${twitterUsername}:`, err);
+        });
+      
+      // 立即返回成功，不等待抓取完成
+      res.json({
+        success: true,
+        message: `Added @${twitterUsername}, fetching latest tweets...`
+      });
+    } else {
+      res.json(result);
+    }
   } catch (error) {
     console.error('Error adding Twitter follow:', error);
     res.status(500).json({
