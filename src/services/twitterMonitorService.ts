@@ -1,10 +1,8 @@
 import Database from 'better-sqlite3';
 import path from 'path';
-import Parser from 'rss-parser';
-import axios from 'axios';
+import { getTwitterApiService } from './twitterApiService';
 
 const db = new Database(path.join(__dirname, '../../data/eagleswap.db'));
-const rssParser = new Parser();
 
 interface TwitterAccount {
   id: number;
@@ -119,48 +117,31 @@ CREATE INDEX IF NOT EXISTS idx_twitter_published ON twitter_posts(published_at D
   }
 
   /**
-   * 使用 Twikit 获取推文（免费，无需API）
+   * 使用 TwitterAPI.io 获取推文
    */
-  async fetchTweetsFromTwikit(username: string): Promise<Tweet[]> {
-    const { exec } = require('child_process');
-    const { promisify } = require('util');
-    const path = require('path');
-    const execAsync = promisify(exec);
-    
+  async fetchTweetsFromApi(username: string): Promise<Tweet[]> {
     try {
-      const scriptPath = path.join(__dirname, '../../scripts/fetch-tweets-twikit.py');
-      const cookiesFile = path.join(__dirname, '../../data/twitter_cookies.json');
-      const command = `python3 "${scriptPath}" "${username}" "${cookiesFile}" 50`;
+      console.log(`🐦 Fetching tweets for @${username} using TwitterAPI.io...`);
       
-      console.log(`🐦 Fetching tweets for @${username} using Twikit...`);
-      
-      const { stdout } = await execAsync(command, {
-        maxBuffer: 10 * 1024 * 1024 // 10MB buffer
-      });
-      
-      const result = JSON.parse(stdout);
-      
-      if (!result.success) {
-        console.error(`❌ Twikit failed for @${username}: ${result.error}`);
-        return [];
-      }
+      const twitterApi = getTwitterApiService();
+      const apiTweets = await twitterApi.fetchUserTweets(username, 20);
       
       const tweets: Tweet[] = [];
       
-      for (const item of result.tweets) {
+      for (const item of apiTweets) {
         // 检查是否已存在
         const exists = db.prepare('SELECT id FROM twitter_posts WHERE tweet_id = ?').get(item.id);
         if (exists) continue;
         
         tweets.push({
           tweet_id: item.id,
-          username: username,
-          user_display_name: item.user.name,
+          username: item.author.userName,
+          user_display_name: item.author.name,
           content: item.text,
-          published_at: new Date(item.created_at).toISOString(),
-          tweet_url: `https://twitter.com/${username}/status/${item.id}`,
-          is_reply: 0,
-          reply_to: undefined
+          published_at: new Date(item.createdAt).toISOString(),
+          tweet_url: `https://twitter.com/${item.author.userName}/status/${item.id}`,
+          is_reply: item.isReply ? 1 : 0,
+          reply_to: item.inReplyToUsername
         });
       }
       
@@ -168,18 +149,9 @@ CREATE INDEX IF NOT EXISTS idx_twitter_published ON twitter_posts(published_at D
       return tweets;
       
     } catch (error) {
-      console.error(`❌ Twikit error for @${username}:`, error);
+      console.error(`❌ TwitterAPI.io error for @${username}:`, error);
       return [];
     }
-  }
-
-  /**
-   * @deprecated 使用 fetchTweetsFromTwikit 替代
-   * Nitter 实例已全部失效
-   */
-  async fetchTweetsFromNitter(username: string): Promise<Tweet[]> {
-    console.warn(`⚠️ fetchTweetsFromNitter is deprecated. Use fetchTweetsFromTwikit instead.`);
-    return this.fetchTweetsFromTwikit(username);
   }
 
   /**
@@ -233,7 +205,7 @@ CREATE INDEX IF NOT EXISTS idx_twitter_published ON twitter_posts(published_at D
       let totalNewTweets = 0;
       
       for (const follow of follows) {
-        const tweets = await this.fetchTweetsFromTwikit(follow.twitter_username);
+        const tweets = await this.fetchTweetsFromApi(follow.twitter_username);
         const saved = this.saveTweets(tweets);
         totalNewTweets += saved;
         
