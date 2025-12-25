@@ -55,8 +55,13 @@ const startServer = async () => {
       const twitterPassword = process.env.TWITTER_PASSWORD;
       const twitterEmail = process.env.TWITTER_EMAIL;
       const twitterPhone = process.env.TWITTER_PHONE;
+      const disableTwitterLogin = process.env.DISABLE_TWITTER_LOGIN === 'true';
       
-      if (twitterUsername && twitterPassword) {
+      if (disableTwitterLogin) {
+        console.log('⚠️ Twitter auto-login is disabled (DISABLE_TWITTER_LOGIN=true)');
+        console.log('💡 You can manually upload cookies via /api/admin/update-twitter-cookies');
+        console.log('📡 Using Nitter RSS as fallback...');
+      } else if (twitterUsername && twitterPassword) {
         console.log('🔐 Using Puppeteer Twitter Scraper (with login)');
         
         // 创建Puppeteer scraper实例
