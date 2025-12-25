@@ -15,6 +15,8 @@ const STATE_PATH = path.join(__dirname, '../../data/x_state.json');
 interface ScraperConfig {
   username: string;
   password: string;
+  email?: string;
+  phone?: string;
   headless: boolean;
 }
 
@@ -155,14 +157,27 @@ class TwitterScraperService {
         const challengeInput = page.locator('input[name="text"]').first();
         if (await challengeInput.isVisible({ timeout: 3000 }).catch(() => false)) {
           console.log('⚠️ Challenge step detected - additional verification required.');
-          console.log('💡 Tip: This usually means X needs email/phone verification.');
-          console.log('🔧 Consider setting TWITTER_SCRAPER_HEADLESS=false to manually complete verification once.');
           
-          // 尝试再次输入用户名
-          await challengeInput.fill(this.config.username);
+          // 尝试使用email或phone
+          let verificationValue = this.config.email || this.config.phone || this.config.username;
+          
+          if (this.config.email) {
+            console.log('📧 Using email for verification');
+          } else if (this.config.phone) {
+            console.log('📱 Using phone for verification');
+          } else {
+            console.log('⚠️ No email/phone configured, trying username again');
+            console.log('💡 Tip: Set TWITTER_EMAIL or TWITTER_PHONE environment variable');
+          }
+          
+          await challengeInput.fill(verificationValue);
+          await page.waitForTimeout(1000);
+          
           const nextBtn2 = page.getByRole('button', { name: /Next|下一步|继续/i }).first();
           await nextBtn2.click();
-          await page.waitForTimeout(3000);
+          await page.waitForTimeout(5000);
+          
+          console.log('✅ Challenge step completed');
         } else {
           console.log('✅ No challenge step detected');
         }

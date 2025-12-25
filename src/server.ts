@@ -53,6 +53,8 @@ const startServer = async () => {
       // 检查是否配置了Twitter账号
       const twitterUsername = process.env.TWITTER_USERNAME;
       const twitterPassword = process.env.TWITTER_PASSWORD;
+      const twitterEmail = process.env.TWITTER_EMAIL;
+      const twitterPhone = process.env.TWITTER_PHONE;
       
       if (twitterUsername && twitterPassword) {
         console.log('🔐 Using Puppeteer Twitter Scraper (with login)');
@@ -61,6 +63,8 @@ const startServer = async () => {
         const twitterScraper = new TwitterScraperService({
           username: twitterUsername,
           password: twitterPassword,
+          email: twitterEmail,
+          phone: twitterPhone,
           headless: process.env.TWITTER_SCRAPER_HEADLESS !== 'false'
         });
         
