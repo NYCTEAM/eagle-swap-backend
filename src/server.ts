@@ -3,6 +3,7 @@ import { app } from './app';
 import { initializeDatabase } from './database/init';
 import newsFeedService from './services/newsFeedService';
 import twitterMonitorService from './services/twitterMonitorService';
+import TwitterScraperService from './services/twitterScraperService';
 // 图表功能已移除 - 不需要价格收集服务
 // import { priceCollector } from './services/priceCollector';
 // import { hotPairsMonitor } from './services/hotPairsMonitor';
@@ -44,28 +45,74 @@ const startServer = async () => {
       console.error('❌ Failed to initialize news feed service:', error);
     }
 
-    // Initialize Twitter monitor
+    // Initialize Twitter monitor with Puppeteer
     try {
       twitterMonitorService.initDatabase();
       console.log('✅ Twitter monitor database initialized');
       
-      // Monitor Twitter on startup
-      twitterMonitorService.monitorAllFollows().then(count => {
-        console.log(`✅ Initial Twitter monitor completed: ${count} tweets`);
-      }).catch(err => {
-        console.error('❌ Failed to monitor Twitter:', err);
-      });
+      // 检查是否配置了Twitter账号
+      const twitterUsername = process.env.TWITTER_USERNAME;
+      const twitterPassword = process.env.TWITTER_PASSWORD;
       
-      // Auto-monitor Twitter every 1 minute
-      setInterval(() => {
+      if (twitterUsername && twitterPassword) {
+        console.log('🔐 Using Puppeteer Twitter Scraper (with login)');
+        
+        // 创建Puppeteer scraper实例
+        const twitterScraper = new TwitterScraperService({
+          username: twitterUsername,
+          password: twitterPassword,
+          headless: process.env.TWITTER_SCRAPER_HEADLESS !== 'false'
+        });
+        
+        // 初始化浏览器并登录
+        twitterScraper.initBrowser()
+          .then(() => twitterScraper.login())
+          .then(() => {
+            console.log('✅ Twitter scraper initialized and logged in');
+            
+            // 首次抓取
+            return twitterScraper.monitorAllFollows();
+          })
+          .then(count => {
+            console.log(`✅ Initial Twitter scraper completed: ${count} tweets`);
+          })
+          .catch(err => {
+            console.error('❌ Failed to initialize Twitter scraper:', err);
+            console.log('⚠️ Falling back to Nitter RSS...');
+          });
+        
+        // 定时抓取（每5分钟）
+        setInterval(() => {
+          twitterScraper.monitorAllFollows()
+            .then(count => {
+              console.log(`✅ Auto Twitter scraper completed: ${count} tweets`);
+            })
+            .catch(err => {
+              console.error('❌ Twitter scraper failed:', err);
+            });
+        }, 5 * 60 * 1000); // 每5分钟
+        
+        console.log('✅ Twitter scraper auto-sync started (every 5 minutes)');
+      } else {
+        console.log('⚠️ Twitter credentials not found, using Nitter RSS (may be unstable)');
+        
+        // 回退到Nitter方式
         twitterMonitorService.monitorAllFollows().then(count => {
-          console.log(`✅ Auto Twitter monitor completed: ${count} tweets`);
+          console.log(`✅ Initial Twitter monitor completed: ${count} tweets`);
         }).catch(err => {
           console.error('❌ Failed to monitor Twitter:', err);
         });
-      }, 1 * 60 * 1000); // 每1分钟
-      
-      console.log('✅ Twitter monitor auto-sync started (every 1 minute)');
+        
+        setInterval(() => {
+          twitterMonitorService.monitorAllFollows().then(count => {
+            console.log(`✅ Auto Twitter monitor completed: ${count} tweets`);
+          }).catch(err => {
+            console.error('❌ Failed to monitor Twitter:', err);
+          });
+        }, 1 * 60 * 1000);
+        
+        console.log('✅ Twitter monitor auto-sync started (every 1 minute)');
+      }
     } catch (error) {
       console.error('❌ Failed to initialize Twitter monitor service:', error);
     }
