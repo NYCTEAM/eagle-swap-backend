@@ -11,6 +11,7 @@
     "start": "node dist/server.js",
     "postinstall": "echo 'Skipping playwright install during build' || true",
     "twitter-login": "node scripts/twitter-login-cli.js",
+    "twitter-login-local": "node scripts/twitter-login-local.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
