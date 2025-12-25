@@ -83,7 +83,11 @@ const corsOptions = {
       'https://eagleswap.llc',
       'https://www.eagleswap.llc',
       'http://eagleswap.llc',
-      'http://www.eagleswap.llc'
+      'http://www.eagleswap.llc',
+      'https://x.com',
+      'https://twitter.com',
+      'https://www.x.com',
+      'https://www.twitter.com'
     ];
 
     // Add production origins from environment
