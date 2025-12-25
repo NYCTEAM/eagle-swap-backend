@@ -126,37 +126,78 @@ class TwitterScraperService {
       await nextBtn.waitFor({ state: 'visible', timeout: 30000 });
       console.log('✅ Next button found, clicking...');
       await nextBtn.click();
-      await page.waitForTimeout(2000);
+      
+      // 等待页面导航
+      await page.waitForTimeout(5000);
+      console.log('⏳ Waiting for page transition...');
 
       // 保存中间截图
       try {
-        await page.screenshot({ path: path.join(__dirname, '../../data/x_after_username.png') });
+        await page.screenshot({ path: path.join(__dirname, '../../data/x_after_username.png'), fullPage: true });
         console.log('📸 Saved screenshot after username step');
       } catch {}
 
-      // 4) 处理可能的验证挑战（email/phone）
+      // 4) 检查是否有错误提示
+      try {
+        const errorText = await page.locator('text=/Sorry|Incorrect|wrong|error|错误/i').first().textContent({ timeout: 2000 }).catch(() => null);
+        if (errorText) {
+          console.log('❌ Error detected on page:', errorText);
+          throw new Error(`Login error: ${errorText}`);
+        }
+      } catch {}
+
+      // 5) 处理可能的验证挑战（email/phone）
       console.log('🔍 Checking for challenge step...');
       try {
+        // 等待一下看是否出现挑战页面
+        await page.waitForTimeout(2000);
+        
         const challengeInput = page.locator('input[name="text"]').first();
-        const challengeTitle = page.locator('text=/Enter your phone|Enter your email|验证|确认/i');
-        if (await challengeInput.isVisible({ timeout: 5000 }).catch(() => false) && 
-            await challengeTitle.isVisible({ timeout: 5000 }).catch(() => false)) {
-          console.log('⚠️ Challenge step detected (email/phone).');
+        if (await challengeInput.isVisible({ timeout: 3000 }).catch(() => false)) {
+          console.log('⚠️ Challenge step detected - additional verification required.');
+          console.log('💡 Tip: This usually means X needs email/phone verification.');
+          console.log('🔧 Consider setting TWITTER_SCRAPER_HEADLESS=false to manually complete verification once.');
+          
+          // 尝试再次输入用户名
           await challengeInput.fill(this.config.username);
           const nextBtn2 = page.getByRole('button', { name: /Next|下一步|继续/i }).first();
           await nextBtn2.click();
-          await page.waitForTimeout(2000);
+          await page.waitForTimeout(3000);
         } else {
           console.log('✅ No challenge step detected');
         }
       } catch (err) {
-        console.log('⚠️ Challenge check error (continuing):', err);
+        console.log('⚠️ Challenge check completed');
       }
 
-      // 5) 输入密码
+      // 6) 输入密码 - 使用多种选择器
       console.log('🔑 Waiting for password input...');
-      const passInput = page.locator('input[type="password"], input[name="password"]').first();
-      await passInput.waitFor({ state: 'visible', timeout: 40000 });
+      
+      // 尝试多种密码输入选择器
+      const passwordSelectors = [
+        'input[type="password"]',
+        'input[name="password"]',
+        'input[autocomplete="current-password"]',
+        'input[autocomplete*="password"]'
+      ];
+      
+      let passInput = null;
+      for (const selector of passwordSelectors) {
+        try {
+          const input = page.locator(selector).first();
+          if (await input.isVisible({ timeout: 5000 }).catch(() => false)) {
+            passInput = input;
+            console.log(`✅ Password input found with selector: ${selector}`);
+            break;
+          }
+        } catch {}
+      }
+      
+      if (!passInput) {
+        console.log('❌ No password input found. Page might be showing an error or challenge.');
+        throw new Error('Password input not found - check screenshots for details');
+      }
+      
       console.log('✅ Password input found, filling...');
       await passInput.fill(this.config.password);
       await page.waitForTimeout(500);

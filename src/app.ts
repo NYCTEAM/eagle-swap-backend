@@ -169,6 +169,25 @@ app.use('/api/okx-bridge', okxBridgeRouter);
 app.use('/api/news', newsRouter);
 app.use('/api/twitter', twitterRouter);
 
+// Debug endpoint to view screenshots
+app.get('/debug/screenshot/:name', (req, res) => {
+  const fs = require('fs');
+  const path = require('path');
+  const { name } = req.params;
+  
+  const allowedFiles = ['x_login_error.png', 'x_after_username.png'];
+  if (!allowedFiles.includes(name)) {
+    return res.status(404).json({ error: 'Screenshot not found' });
+  }
+  
+  const filePath = path.join(__dirname, '../data', name);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'Screenshot file does not exist' });
+  }
+  
+  res.sendFile(filePath);
+});
+
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({
@@ -183,7 +202,8 @@ app.get('/', (req, res) => {
       farms: '/api/farms',
       users: '/api/users',
       prices: '/api/prices',
-      health: '/health'
+      health: '/health',
+      debug_screenshots: '/debug/screenshot/x_login_error.png or /debug/screenshot/x_after_username.png'
     }
   });
 });
