@@ -175,7 +175,7 @@ app.get('/debug/screenshot/:name', (req, res) => {
   const path = require('path');
   const { name } = req.params;
   
-  const allowedFiles = ['x_login_error.png', 'x_after_username.png'];
+  const allowedFiles = ['x_login_error.png', 'x_after_username.png', 'x_step2_after_id.png', 'x_verification_step.png'];
   if (!allowedFiles.includes(name)) {
     return res.status(404).json({ error: 'Screenshot not found' });
   }
@@ -186,6 +186,29 @@ app.get('/debug/screenshot/:name', (req, res) => {
   }
   
   res.sendFile(filePath);
+});
+
+// ✅ Manual Cookie Upload Endpoint
+app.post('/api/admin/update-twitter-cookies', (req, res) => {
+  const fs = require('fs');
+  const path = require('path');
+  const STATE_PATH = path.join(__dirname, '../data/x_state.json');
+  
+  try {
+    const cookies = req.body;
+    
+    if (!Array.isArray(cookies)) {
+      return res.status(400).json({ success: false, error: 'Invalid format: cookies must be an array' });
+    }
+    
+    fs.writeFileSync(STATE_PATH, JSON.stringify(cookies, null, 2));
+    console.log('💾 Manually updated Twitter cookies via API');
+    
+    res.json({ success: true, message: 'Cookies saved successfully. Restart the server or wait for next scraper run.' });
+  } catch (error: any) {
+    console.error('Failed to save cookies:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 // Root endpoint
