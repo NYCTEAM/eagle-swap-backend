@@ -7,7 +7,7 @@
     "dev": "nodemon src/server.ts",
     "build": "tsc",
     "build:prod": "tsc",
-    "prestart": "node init-on-startup.js || true && npx playwright install chromium || true",
+    "prestart": "node init-on-startup.js || true",
     "start": "node dist/server.js",
     "postinstall": "echo 'Skipping playwright install during build' || true",
     "twitter-init": "node scripts/init-popular-accounts.js",

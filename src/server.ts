@@ -50,66 +50,14 @@ const startServer = async () => {
       twitterMonitorService.initDatabase();
       console.log('✅ Twitter monitor database initialized');
       
-      // 检查是否配置了Twitter账号
-      const twitterUsername = process.env.TWITTER_USERNAME;
-      const twitterPassword = process.env.TWITTER_PASSWORD;
-      const twitterEmail = process.env.TWITTER_EMAIL;
-      const twitterPhone = process.env.TWITTER_PHONE;
-      const disableTwitterLogin = process.env.DISABLE_TWITTER_LOGIN === 'true';
+      // 使用 TwitterAPI.io 进行推文监控
+      console.log('📡 Using TwitterAPI.io for tweet monitoring...');
       
-      if (disableTwitterLogin) {
-        console.log('⚠️ Twitter auto-login is disabled (DISABLE_TWITTER_LOGIN=true)');
-        console.log('💡 You can manually upload cookies via /api/admin/update-twitter-cookies');
-        console.log('📡 Using TwitterAPI.io for tweet monitoring...');
-      } else if (twitterUsername && twitterPassword) {
-        console.log('🔐 Using Puppeteer Twitter Scraper (with login)');
-        
-        // 创建Puppeteer scraper实例
-        const twitterScraper = new TwitterScraperService({
-          username: twitterUsername,
-          password: twitterPassword,
-          email: twitterEmail,
-          phone: twitterPhone,
-          headless: process.env.TWITTER_SCRAPER_HEADLESS !== 'false'
-        });
-        
-        // 初始化浏览器并登录
-        twitterScraper.initBrowser()
-          .then(() => twitterScraper.login())
-          .then(() => {
-            console.log('✅ Twitter scraper initialized and logged in');
-            
-            // 首次抓取
-            return twitterScraper.monitorAllFollows();
-          })
-          .then(count => {
-            console.log(`✅ Initial Twitter scraper completed: ${count} tweets`);
-          })
-          .catch(err => {
-            console.error('❌ Failed to initialize Twitter scraper:', err);
-            console.log('⚠️ Falling back to TwitterAPI.io...');
-          });
-        
-        // 定时抓取（每5分钟）
-        setInterval(() => {
-          twitterScraper.monitorAllFollows()
-            .then(count => {
-              console.log(`✅ Auto Twitter scraper completed: ${count} tweets`);
-            })
-            .catch(err => {
-              console.error('❌ Twitter scraper failed:', err);
-            });
-        }, 5 * 60 * 1000); // 每5分钟
-        
-        console.log('✅ Twitter scraper auto-sync started (every 5 minutes)');
-      } else {
-        console.log('⚠️ Twitter credentials not found, using TwitterAPI.io');
-        
-        // 初始化热门账号推文（设置为优先级 1）
-        console.log('🚀 Initializing popular Twitter accounts...');
-        const popularAccounts = ['cz_binance', 'binance', 'elonmusk', 'VitalikButerin', 'heyibinance'];
-        
-        (async () => {
+      // 初始化热门账号推文（设置为优先级 1）
+      console.log('🚀 Initializing popular Twitter accounts...');
+      const popularAccounts = ['cz_binance', 'binance', 'elonmusk', 'VitalikButerin', 'heyibinance'];
+      
+      (async () => {
           let totalInitial = 0;
           for (const username of popularAccounts) {
             try {
@@ -164,12 +112,11 @@ const startServer = async () => {
           twitterMonitorService.autoAdjustPriorities();
         }, 60 * 60 * 1000);
         
-        console.log('✅ Twitter monitor auto-sync started:');
-        console.log('   🔥 Hot accounts: every 5 minutes');
-        console.log('   📊 Normal accounts: every 15 minutes');
-        console.log('   ❄️  Cold accounts: every 30 minutes');
-        console.log('   🔄 Auto-adjust priorities: every hour');
-      }
+      console.log('✅ Twitter monitor auto-sync started:');
+      console.log('   🔥 Hot accounts: every 5 minutes');
+      console.log('   📊 Normal accounts: every 15 minutes');
+      console.log('   ❄️  Cold accounts: every 30 minutes');
+      console.log('   🔄 Auto-adjust priorities: every hour');
     } catch (error) {
       console.error('❌ Failed to initialize Twitter monitor service:', error);
     }
