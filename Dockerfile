@@ -42,8 +42,8 @@ RUN npx playwright install chromium
 # Copy source code
 COPY . .
 
-# Build TypeScript
-RUN npm run build || true
+# Build TypeScript (remove dist first to force clean build)
+RUN rm -rf dist && npm run build
 
 # Expose port
 EXPOSE 3005

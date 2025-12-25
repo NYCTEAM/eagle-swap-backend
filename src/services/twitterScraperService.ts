@@ -220,7 +220,7 @@ class TwitterScraperService {
       }
 
       // 提取推文数据
-      const tweets = await this.page.evaluate((targetUsername: string, maxTweets: number) => {
+      const tweets = await this.page.evaluate(({ targetUsername, maxTweets }) => {
         const tweetElements = document.querySelectorAll('article[data-testid="tweet"]');
         const results: any[] = [];
 
@@ -270,7 +270,7 @@ class TwitterScraperService {
         }
 
         return results;
-      }, username, limit);
+      }, { targetUsername: username, maxTweets: limit });
 
       console.log(`✅ Fetched ${tweets.length} tweets from @${username}`);
       return tweets as Tweet[];

@@ -5,8 +5,8 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "nodemon src/server.ts",
-    "build": "tsc || true",
-    "build:prod": "tsc || true",
+    "build": "tsc",
+    "build:prod": "tsc",
     "prestart": "node init-on-startup.js || true && npx playwright install chromium || true",
     "start": "node dist/server.js",
     "postinstall": "npx playwright install chromium || true",
