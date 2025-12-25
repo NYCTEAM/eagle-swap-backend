@@ -138,8 +138,11 @@ export function getTwitterApiService(): TwitterApiService {
   if (!twitterApiService) {
     const apiKey = process.env.TWITTER_API_KEY || '';
     if (!apiKey) {
+      console.error('❌ TWITTER_API_KEY is not set in environment variables!');
+      console.error('💡 Please add TWITTER_API_KEY to your .env file or Coolify environment');
       throw new Error('TWITTER_API_KEY is not set');
     }
+    console.log('✅ TwitterAPI.io service initialized');
     twitterApiService = new TwitterApiService({ apiKey });
   }
   return twitterApiService;

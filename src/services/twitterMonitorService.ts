@@ -127,7 +127,14 @@ CREATE INDEX IF NOT EXISTS idx_twitter_published ON twitter_posts(published_at D
     try {
       console.log(`🐦 Fetching tweets for @${username} using TwitterAPI.io...`);
       
-      const twitterApi = getTwitterApiService();
+      let twitterApi;
+      try {
+        twitterApi = getTwitterApiService();
+      } catch (error) {
+        console.error(`❌ Failed to initialize TwitterAPI service: ${error}`);
+        return [];
+      }
+      
       const apiTweets = await twitterApi.fetchUserTweets(username, 20);
       
       const tweets: Tweet[] = [];
