@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import path from 'path';
 import { app } from './app';
 import { initializeDatabase } from './database/init';
 import newsFeedService from './services/newsFeedService';
@@ -149,7 +150,7 @@ const startServer = async () => {
 ║  📈 Eagle Indexer: ${process.env.EAGLE_INDEXER_URL || 'http://localhost:3005'}               ║
 ║                                                              ║
 ║  Environment: ${(process.env.NODE_ENV || 'development').toUpperCase().padEnd(11)}                        ║
-║  Database: ${(process.env.DATABASE_PATH || './data/eagleswap.db').padEnd(15)}                ║
+║  Database: ${path.join(__dirname, '../data/eagleswap.db').padEnd(15)}                ║
 ╚══════════════════════════════════════════════════════════════╝
       `);
     });
