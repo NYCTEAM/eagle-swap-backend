@@ -107,7 +107,7 @@ class SimpleNFTSync {
       CREATE INDEX IF NOT EXISTS idx_user_nfts_level ON user_nfts(level);
     `);
 
-    console.log('✅ NFT tables initialized in main database (eagle-swap.db)');
+    console.log('✅ NFT tables initialized in main database (eagleswap.db)');
   }
 
   // 启动同步服务
