@@ -219,8 +219,8 @@ class ChainSync {
 
       console.log(`📊 ${this.config.chainName}: Syncing from block ${fromBlock} to ${currentBlock}`);
 
-      // 分批查询事件（避免RPC限制）
-      const batchSize = 5000;
+      // 分批查询事件（自建RPC可以使用更大的批量）
+      const batchSize = 10000;
       
       for (let start = fromBlock; start <= currentBlock; start += batchSize) {
         const end = Math.min(start + batchSize - 1, currentBlock);

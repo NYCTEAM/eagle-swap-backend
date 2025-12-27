@@ -231,8 +231,8 @@ export class MarketplaceSyncService {
       
       const fromBlock = lastSyncedBlock > 0 ? lastSyncedBlock + 1 : Math.max(0, currentBlock - 50000);
       
-      // 分批扫描
-      const BATCH_SIZE = 5000;
+      // 分批扫描（自建RPC可以使用更大的批量）
+      const BATCH_SIZE = 10000;
       for (let start = fromBlock; start <= currentBlock; start += BATCH_SIZE) {
         const end = Math.min(start + BATCH_SIZE - 1, currentBlock);
         

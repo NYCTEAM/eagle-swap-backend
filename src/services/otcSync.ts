@@ -85,7 +85,7 @@ class OTCSync {
       }
       
       const fromBlock = lastSyncedBlock + 1;
-      const toBlock = Math.min(fromBlock + 1000, currentBlock); // 每次最多扫描1000个区块
+      const toBlock = Math.min(fromBlock + 2000, currentBlock); // 自建RPC可以扫描更多区块
       
       // 扫描 OrderCreated 事件
       const createdEvents = await this.contract.queryFilter('OrderCreated', fromBlock, toBlock);
@@ -194,12 +194,22 @@ class OTCSync {
           return;
         }
         
+        // 如果落后太多区块（超过 10000），跳过历史扫描，直接从当前区块开始
+        if (blocksBehind > 10000) {
+          console.log(`   ⚠️ Too far behind (${blocksBehind} blocks), skipping to current block`);
+          this.saveLastSyncedBlock(currentBlock);
+          console.log(`   ✅ Sync state updated to block ${currentBlock}`);
+          return;
+        }
+        
         console.log(`   📦 Syncing ${blocksBehind} new blocks (${fromBlock} to ${currentBlock})...`);
         await this.scanBlocks(fromBlock, currentBlock);
       } else if (orderCount > 0) {
-        // 数据库有订单但没有同步记录，只监听新事件
-        console.log(`   ✅ Database has ${orderCount} orders, skipping historical scan`);
-        console.log(`   📡 Will only listen for new events from block ${currentBlock}`);
+        // 数据库有订单但没有同步记录，直接从当前区块开始监听
+        console.log(`   ✅ Database has ${orderCount} orders, starting from current block`);
+        this.saveLastSyncedBlock(currentBlock);
+        console.log(`   ✅ Sync state initialized at block ${currentBlock}`);
+        return;
       } else {
         // 首次启动，扫描最近的区块
         const fromBlock = Math.max(0, currentBlock - 5000); // 减少到 5000 个区块
@@ -218,7 +228,7 @@ class OTCSync {
   
   // 扫描区块范围
   private async scanBlocks(fromBlock: number, toBlock: number) {
-    const BATCH_SIZE = 500; // 增加批次大小
+    const BATCH_SIZE = 2000; // 自建RPC可以使用更大的批量
     let totalEvents = 0;
     
     for (let start = fromBlock; start <= toBlock; start += BATCH_SIZE) {
