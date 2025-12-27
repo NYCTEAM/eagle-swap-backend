@@ -2,32 +2,64 @@ import { ethers } from 'ethers';
 import { db } from '../database';
 
 /**
- * NFT 合约同步服务
- * 监听链上事件并同步到数据库
+ * 多链 NFT 合约同步服务
+ * 监听 X Layer 和 BSC 链上事件并同步到数据库
  */
 
-// NFT 合约配置
-const NFT_CONTRACT_ADDRESS = process.env.NFT_CONTRACT_ADDRESS || '';
-const RPC_URL = process.env.X_LAYER_RPC_URL || 'https://rpc1.eagleswap.llc/xlayer/';
+// 多链配置
+interface ChainConfig {
+  name: string;
+  chainId: number;
+  nftAddress: string;
+  rpcUrl: string;
+}
 
-// NFT 合约 ABI (只需要事件和查询函数)
-const NFT_ABI = [
-  'event NFTMinted(address indexed to, uint256 indexed tokenId, uint8 level, uint256 weight, string paymentMethod)',
-  'event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)',
-  'function getLevelInfo(uint8 level) view returns (string name, uint256 weight, uint256 priceUSDT, uint256 priceETH, uint256 supply, uint256 minted, uint256 available, string description)',
-  'function getCurrentStage(uint256 tokenId) view returns (uint8)',
-  'function getEffectiveWeight(uint256 tokenId) view returns (uint256)',
-  'function tokensOfOwner(address owner) view returns (uint256[])',
+const CHAINS: ChainConfig[] = [
+  {
+    name: 'X Layer',
+    chainId: 196,
+    nftAddress: '0xfe016c9A9516AcB14d504aE821C46ae2bc968cd7',
+    rpcUrl: 'https://rpc1.eagleswap.llc/xlayer/'
+  },
+  {
+    name: 'BSC',
+    chainId: 56,
+    nftAddress: '0x3c117d186C5055071EfF91d87f2600eaF88D591D',
+    rpcUrl: 'https://rpc1.eagleswap.llc/bsc/'
+  }
 ];
 
+// NFT 合约 ABI
+const NFT_ABI = [
+  'event NFTMinted(address indexed to, uint256 indexed localTokenId, uint256 indexed globalTokenId, uint8 level, uint256 weight, string paymentMethod)',
+  'event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)',
+  'function tokensOfOwner(address owner) view returns (uint256[])',
+  'function nftData(uint256 tokenId) view returns (uint8 level, uint256 mintedAt, uint256 globalTokenId)',
+  'function ownerOf(uint256 tokenId) view returns (address)'
+];
+
+// 等级权重配置
+const LEVEL_WEIGHTS: Record<number, number> = {
+  1: 150,   // Micro
+  2: 300,   // Mini
+  3: 500,   // Bronze
+  4: 1000,  // Silver
+  5: 3000,  // Gold
+  6: 7000,  // Platinum
+  7: 15000  // Diamond
+};
+
 class NFTSyncService {
-  private provider: ethers.JsonRpcProvider;
-  private contract: ethers.Contract;
+  private chains: Map<number, { provider: ethers.JsonRpcProvider; contract: ethers.Contract; config: ChainConfig }> = new Map();
   private isRunning: boolean = false;
 
   constructor() {
-    this.provider = new ethers.JsonRpcProvider(RPC_URL);
-    this.contract = new ethers.Contract(NFT_CONTRACT_ADDRESS, NFT_ABI, this.provider);
+    // 初始化所有链的连接
+    for (const config of CHAINS) {
+      const provider = new ethers.JsonRpcProvider(config.rpcUrl);
+      const contract = new ethers.Contract(config.nftAddress, NFT_ABI, provider);
+      this.chains.set(config.chainId, { provider, contract, config });
+    }
   }
 
   /**
@@ -40,250 +72,163 @@ class NFTSyncService {
     }
 
     this.isRunning = true;
-    console.log('🚀 Starting NFT sync service...');
+    console.log('🚀 Starting Multi-Chain NFT sync service...');
 
     // 1. 初始化数据库表
     await this.initDatabase();
 
-    // 2. 同步历史数据
-    await this.syncHistoricalData();
+    // 2. 同步所有链的历史数据
+    for (const [chainId, chainData] of this.chains) {
+      console.log(`📊 Syncing ${chainData.config.name}...`);
+      await this.syncChainData(chainId);
+    }
 
-    // 3. 监听新事件
-    this.listenToEvents();
+    // 3. 监听所有链的新事件
+    for (const [chainId, chainData] of this.chains) {
+      this.listenToChainEvents(chainId);
+    }
 
-    console.log('✅ NFT sync service started');
+    console.log('✅ Multi-Chain NFT sync service started');
   }
 
   /**
    * 初始化数据库表
    */
   private async initDatabase() {
-    // NFT 等级配置表
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS nft_levels (
-        level INTEGER PRIMARY KEY,
-        name TEXT NOT NULL,
-        weight REAL NOT NULL,
-        price_usdt REAL NOT NULL,
-        price_eth REAL NOT NULL,
-        supply INTEGER NOT NULL,
-        minted INTEGER DEFAULT 0,
-        available INTEGER NOT NULL,
-        description TEXT,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // NFT 所有权表
+    // NFT 所有权表（多链支持）
     db.exec(`
       CREATE TABLE IF NOT EXISTS nft_ownership (
         token_id INTEGER PRIMARY KEY,
         owner_address TEXT NOT NULL,
         level INTEGER NOT NULL,
-        stage INTEGER NOT NULL,
+        stage INTEGER DEFAULT 1,
         effective_weight REAL NOT NULL,
-        minted_at DATETIME NOT NULL,
-        payment_method TEXT,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (level) REFERENCES nft_levels(level)
+        chain_id INTEGER DEFAULT 196,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
-    // NFT 交易历史表
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS nft_transactions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        tx_hash TEXT NOT NULL,
-        token_id INTEGER NOT NULL,
-        from_address TEXT NOT NULL,
-        to_address TEXT NOT NULL,
-        event_type TEXT NOT NULL,
-        block_number INTEGER NOT NULL,
-        timestamp DATETIME NOT NULL,
-        UNIQUE(tx_hash, token_id)
-      )
-    `);
+    // 检查并添加 chain_id 列（如果表已存在但没有此列）
+    try {
+      db.exec(`ALTER TABLE nft_ownership ADD COLUMN chain_id INTEGER DEFAULT 196`);
+    } catch (e) {
+      // 列已存在，忽略错误
+    }
 
     // 创建索引
     db.exec(`
       CREATE INDEX IF NOT EXISTS idx_nft_ownership_owner ON nft_ownership(owner_address);
-      CREATE INDEX IF NOT EXISTS idx_nft_ownership_level ON nft_ownership(level);
-      CREATE INDEX IF NOT EXISTS idx_nft_transactions_token ON nft_transactions(token_id);
-      CREATE INDEX IF NOT EXISTS idx_nft_transactions_address ON nft_transactions(to_address);
+      CREATE INDEX IF NOT EXISTS idx_nft_ownership_chain ON nft_ownership(chain_id);
     `);
 
     console.log('✅ Database initialized');
   }
 
   /**
-   * 同步历史数据
+   * 同步单条链的数据
    */
-  private async syncHistoricalData() {
-    console.log('📊 Syncing historical data...');
+  private async syncChainData(chainId: number) {
+    const chainData = this.chains.get(chainId);
+    if (!chainData) return;
+
+    const { contract, config } = chainData;
 
     try {
-      // 同步所有等级配置
-      for (let level = 1; level <= 7; level++) {
-        await this.syncLevelInfo(level);
-      }
+      // 监听 NFTMinted 事件并同步历史数据
+      const filter = contract.filters.NFTMinted();
+      const events = await contract.queryFilter(filter, -10000); // 最近 10000 个区块
 
-      // 同步所有 NFT (从合约事件)
-      const filter = this.contract.filters.NFTMinted();
-      const events = await this.contract.queryFilter(filter);
+      console.log(`Found ${events.length} NFT mint events on ${config.name}`);
 
       for (const event of events) {
-        await this.handleMintEvent(event);
+        await this.handleMintEvent(event, chainId);
       }
 
-      console.log(`✅ Synced ${events.length} NFTs`);
-    } catch (error) {
-      console.error('❌ Error syncing historical data:', error);
+      console.log(`✅ Synced ${config.name}`);
+    } catch (error: any) {
+      console.error(`❌ Error syncing ${config.name}:`, error?.message);
     }
   }
 
   /**
-   * 同步等级信息
+   * 监听单条链的事件
    */
-  private async syncLevelInfo(level: number) {
-    try {
-      const info = await this.contract.getLevelInfo(level);
-      
-      const stmt = db.prepare(`
-        INSERT OR REPLACE INTO nft_levels 
-        (level, name, weight, price_usdt, price_eth, supply, minted, available, description, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `);
+  private listenToChainEvents(chainId: number) {
+    const chainData = this.chains.get(chainId);
+    if (!chainData) return;
 
-      // 处理权重：合约存储的权重需要除以10得到实际权重
-      const rawWeight = Number(info[1]);
-      const actualWeight = rawWeight / 10; // 合约设计：存储值除以10 = 实际权重
-      
-      stmt.run(
-        level,
-        info[0], // name
-        actualWeight, // weight，直接使用计算后的实际权重
-        Number(info[2]) / 1e6, // priceUSDT (6 decimals)
-        Number(ethers.formatEther(info[3])), // priceETH
-        Number(info[4]), // supply
-        Number(info[5]), // minted
-        Number(info[6]), // available
-        info[7] // description
-      );
+    const { contract, config } = chainData;
 
-      console.log(`✅ Synced level ${level}: ${info[0]}, weight: ${actualWeight} (raw: ${rawWeight})`);
-
-      console.log(`✅ Synced level ${level}: ${info[0]}`);
-    } catch (error) {
-      console.error(`❌ Error syncing level ${level}:`, error);
-    }
-  }
-
-  /**
-   * 监听合约事件
-   */
-  private listenToEvents() {
     // 监听 NFTMinted 事件
-    this.contract.on('NFTMinted', async (to, tokenId, level, weight, paymentMethod, event) => {
-      console.log(`🎉 New NFT minted: #${tokenId} to ${to}`);
-      await this.handleMintEvent(event);
-      await this.syncLevelInfo(level);
+    contract.on('NFTMinted', async (to, localTokenId, globalTokenId, level, weight, paymentMethod, event) => {
+      console.log(`🎉 New NFT minted on ${config.name}: #${globalTokenId} to ${to}`);
+      await this.handleMintEvent(event, chainId);
     });
 
     // 监听 Transfer 事件
-    this.contract.on('Transfer', async (from, to, tokenId, event) => {
-      console.log(`🔄 NFT transferred: #${tokenId} from ${from} to ${to}`);
-      await this.handleTransferEvent(event);
+    contract.on('Transfer', async (from, to, tokenId, event) => {
+      console.log(`🔄 NFT transferred on ${config.name}: #${tokenId} from ${from} to ${to}`);
+      await this.handleTransferEvent(event, chainId);
     });
 
-    console.log('👂 Listening to contract events...');
+    console.log(`👂 Listening to ${config.name} events...`);
   }
 
   /**
    * 处理铸造事件
    */
-  private async handleMintEvent(event: any) {
+  private async handleMintEvent(event: any, chainId: number) {
     try {
-      const { to, tokenId, level, weight, paymentMethod } = event.args;
-      const block = await event.getBlock();
-
-      // 查询链上数据
-      const stage = await this.contract.getCurrentStage(tokenId);
-      const effectiveWeight = await this.contract.getEffectiveWeight(tokenId);
+      const { to, localTokenId, globalTokenId, level } = event.args;
+      const effectiveWeight = LEVEL_WEIGHTS[Number(level)] || 150;
 
       // 保存到数据库
       const stmt = db.prepare(`
         INSERT OR REPLACE INTO nft_ownership
-        (token_id, owner_address, level, stage, effective_weight, minted_at, payment_method, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        (token_id, owner_address, level, stage, effective_weight, chain_id, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       `);
 
       stmt.run(
-        Number(tokenId),
+        Number(globalTokenId),
         to.toLowerCase(),
         Number(level),
-        Number(stage),
-        Number(effectiveWeight) / 10,
-        new Date(block.timestamp * 1000).toISOString(),
-        paymentMethod
+        1, // stage
+        effectiveWeight,
+        chainId
       );
-
-      // 记录交易历史
-      await this.recordTransaction(event, 'mint');
-    } catch (error) {
-      console.error('❌ Error handling mint event:', error);
+    } catch (error: any) {
+      console.error('❌ Error handling mint event:', error?.message);
     }
   }
 
   /**
    * 处理转移事件
    */
-  private async handleTransferEvent(event: any) {
+  private async handleTransferEvent(event: any, chainId: number) {
     try {
       const { from, to, tokenId } = event.args;
 
       // 如果不是铸造 (from != 0x0),更新所有权
       if (from !== ethers.ZeroAddress) {
+        const chainData = this.chains.get(chainId);
+        if (!chainData) return;
+
+        // 需要获取 globalTokenId
+        const nftData = await chainData.contract.nftData(tokenId);
+        const globalTokenId = Number(nftData.globalTokenId);
+
         const stmt = db.prepare(`
           UPDATE nft_ownership
           SET owner_address = ?, updated_at = CURRENT_TIMESTAMP
-          WHERE token_id = ?
+          WHERE token_id = ? AND chain_id = ?
         `);
 
-        stmt.run(to.toLowerCase(), Number(tokenId));
+        stmt.run(to.toLowerCase(), globalTokenId, chainId);
       }
-
-      // 记录交易历史
-      await this.recordTransaction(event, 'transfer');
-    } catch (error) {
-      console.error('❌ Error handling transfer event:', error);
-    }
-  }
-
-  /**
-   * 记录交易历史
-   */
-  private async recordTransaction(event: any, eventType: string) {
-    try {
-      const { from, to, tokenId } = event.args;
-      const block = await event.getBlock();
-
-      const stmt = db.prepare(`
-        INSERT OR IGNORE INTO nft_transactions
-        (tx_hash, token_id, from_address, to_address, event_type, block_number, timestamp)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `);
-
-      stmt.run(
-        event.transactionHash,
-        Number(tokenId),
-        from.toLowerCase(),
-        to.toLowerCase(),
-        eventType,
-        event.blockNumber,
-        new Date(block.timestamp * 1000).toISOString()
-      );
-    } catch (error) {
-      console.error('❌ Error recording transaction:', error);
+    } catch (error: any) {
+      console.error('❌ Error handling transfer event:', error?.message);
     }
   }
 
@@ -291,9 +236,11 @@ class NFTSyncService {
    * 停止同步服务
    */
   stop() {
-    this.contract.removeAllListeners();
+    for (const [chainId, chainData] of this.chains) {
+      chainData.contract.removeAllListeners();
+    }
     this.isRunning = false;
-    console.log('🛑 NFT sync service stopped');
+    console.log('🛑 Multi-Chain NFT sync service stopped');
   }
 }
 
