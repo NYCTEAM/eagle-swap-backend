@@ -4,6 +4,7 @@ import { app } from './app';
 import { initializeDatabase } from './database/init';
 import newsFeedService from './services/newsFeedService';
 import twitterMonitorService from './services/twitterMonitorService';
+import nftSyncService from './services/nftSyncService';
 // 图表功能已移除 - 不需要价格收集服务
 // import { priceCollector } from './services/priceCollector';
 // import { hotPairsMonitor } from './services/hotPairsMonitor';
@@ -120,6 +121,17 @@ const startServer = async () => {
       console.log('   🔄 Auto-adjust priorities: every hour');
     } catch (error: any) {
       console.error('❌ Failed to initialize Twitter monitor service:', error);
+      console.error('Error details:', error?.message);
+      console.error('Stack trace:', error?.stack);
+    }
+
+    // Initialize NFT Sync Service
+    try {
+      console.log('🔧 Initializing NFT sync service...');
+      await nftSyncService.start();
+      console.log('✅ NFT sync service started - monitoring blockchain events');
+    } catch (error: any) {
+      console.error('❌ Failed to initialize NFT sync service:', error);
       console.error('Error details:', error?.message);
       console.error('Stack trace:', error?.stack);
     }
