@@ -101,7 +101,7 @@ export class NFTMiningService {
     // 1. 获取用户所有 NFT（支持多链）
     // ============================================
     const nfts = db.prepare(`
-      SELECT global_token_id, level, stage, minted_at, chain_id, chain_name
+      SELECT global_token_id, level, stage, minted_at, acquired_at, created_at, chain_id, chain_name
       FROM nft_holders
       WHERE LOWER(owner_address) = LOWER(?)
     `).all(userAddress) as any[];
@@ -151,15 +151,28 @@ export class NFTMiningService {
       // 从数据库获取每日奖励（已包含年度和阶段衰减）
       const dailyReward = this.getDailyReward(level, stage, currentYear);
       
-      // 计算持有时间 (从上次领取或 NFT 铸造时间开始)
-      // 必须使用 minted_at (链上铸造时间)，不能使用 created_at (数据库记录时间)
-      if (!nft.minted_at) {
-        console.warn(`⚠️ NFT ${nft.global_token_id} 缺少 minted_at，跳过奖励计算`);
+      // 计算持有时间 (从上次领取或用户获得 NFT 的时间开始)
+      // 优先使用 acquired_at (用户获得时间)，其次 minted_at，最后 created_at
+      let nftAcquiredAt: Date;
+      
+      if (nft.acquired_at && nft.acquired_at > 0) {
+        // acquired_at 是 Unix 时间戳（秒）- 用户获得此 NFT 的时间
+        nftAcquiredAt = new Date(nft.acquired_at * 1000);
+      } else if (nft.minted_at && nft.minted_at > 0) {
+        // 后备1: 使用铸造时间（假设用户是原始持有者）
+        nftAcquiredAt = new Date(nft.minted_at * 1000);
+        console.warn(`⚠️ NFT ${nft.global_token_id} 缺少 acquired_at，使用 minted_at: ${nft.minted_at}`);
+      } else if (nft.created_at) {
+        // 后备2: 使用数据库记录时间
+        nftAcquiredAt = new Date(nft.created_at);
+        console.warn(`⚠️ NFT ${nft.global_token_id} 缺少 acquired_at 和 minted_at，使用 created_at: ${nft.created_at}`);
+      } else {
+        // 如果都没有，跳过此 NFT
+        console.error(`❌ NFT ${nft.global_token_id} 缺少所有时间字段，跳过奖励计算`);
         continue;
       }
       
-      const nftMintedAt = new Date(nft.minted_at * 1000); // minted_at 是 Unix 时间戳
-      const startTime = lastClaimTime || nftMintedAt;
+      const startTime = lastClaimTime || nftAcquiredAt;
       const startTimeMs = startTime instanceof Date ? startTime.getTime() : startTime;
       const daysHeld = Math.max(0, (now.getTime() - startTimeMs) / (1000 * 60 * 60 * 24));
       
