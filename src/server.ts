@@ -4,8 +4,7 @@ import { app } from './app';
 import { initializeDatabase } from './database/init';
 import newsFeedService from './services/newsFeedService';
 import twitterMonitorService from './services/twitterMonitorService';
-import nftSyncService from './services/nftSyncService';
-// 图表功能已移除 - 不需要价格收集服务
+// NFT 同步服务已在 app.ts 中通过 multiChainNftSync 启动
 // import { priceCollector } from './services/priceCollector';
 // import { hotPairsMonitor } from './services/hotPairsMonitor';
 
@@ -125,16 +124,8 @@ const startServer = async () => {
       console.error('Stack trace:', error?.stack);
     }
 
-    // Initialize NFT Sync Service
-    try {
-      console.log('🔧 Initializing NFT sync service...');
-      await nftSyncService.start();
-      console.log('✅ NFT sync service started - monitoring blockchain events');
-    } catch (error: any) {
-      console.error('❌ Failed to initialize NFT sync service:', error);
-      console.error('Error details:', error?.message);
-      console.error('Stack trace:', error?.stack);
-    }
+    // NFT 同步服务已在 app.ts 中通过 multiChainNftSync 启动
+    // 无需在这里重复启动
 
     // 图表功能已移除 - 禁用价格收集服务
     // Start price collector for X Layer chart data
