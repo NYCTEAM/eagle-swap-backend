@@ -24,7 +24,7 @@ const CHAIN_CONFIGS: ChainConfig[] = [
     chainName: 'BSC',
     rpcUrl: process.env.BSC_RPC_URL || 'https://rpc1.eagleswap.llc/bsc/',
     nftAddress: process.env.BSC_NFT_ADDRESS || '0x3c117d186C5055071EfF91d87f2600eaF88D591D', // Multi-Chain Global (Auto-decimals)
-    startBlock: 44000000 // NFT合约部署区块（大约）
+    startBlock: 72700000 // 更近的区块，避免 RPC 错误
   }
 ];
 
@@ -190,10 +190,21 @@ class ChainSync {
     const existing = db.prepare('SELECT * FROM sync_status WHERE chain_id = ?').get(this.config.chainId);
     
     if (!existing) {
+      // 如果数据库中已有该链的 NFT 数据，从最新的 NFT 区块开始
+      const latestNft = db.prepare(`
+        SELECT MAX(CAST(minted_at AS INTEGER)) as latest_block 
+        FROM nft_holders 
+        WHERE chain_id = ? AND minted_at NOT LIKE '%-%'
+      `).get(this.config.chainId) as any;
+      
+      const startBlock = latestNft?.latest_block || this.config.startBlock || 0;
+      
       db.prepare(`
         INSERT INTO sync_status (chain_id, chain_name, last_synced_block)
         VALUES (?, ?, ?)
-      `).run(this.config.chainId, this.config.chainName, this.config.startBlock || 0);
+      `).run(this.config.chainId, this.config.chainName, startBlock);
+      
+      console.log(`📍 ${this.config.chainName}: Initialized sync from block ${startBlock}`);
     }
   }
 
