@@ -26,7 +26,7 @@ class OTCSync {
     // OTC合约地址
     const contractAddress = chainId === 196
       ? '0x22579d6C47edEC5Cb31Dd1fD238C7d0892Fd285c'
-      : '0x594952F7A9fAE9Cca7E91A3d64FE396F53431170';
+      : '0xc7801000FCBfF7C2fA05F6B38Ead39401F0551F6';
     
     // OTC合约ABI
     const otcABI = [
