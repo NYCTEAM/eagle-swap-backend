@@ -15,7 +15,7 @@ const CHAINS = [
     chainName: 'BSC',
     rpcUrl: process.env.BSC_RPC_URL || 'https://rpc1.eagleswap.llc/bsc/',
     nftAddress: '0x3c117d186C5055071EfF91d87f2600eaF88D591D',
-    startBlock: 44000000
+    startBlock: 44500000 // 更近的区块，避免 RPC 错误
   }
 ];
 
