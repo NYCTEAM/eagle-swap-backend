@@ -1,10 +1,9 @@
 import dotenv from 'dotenv';
 import path from 'path';
-import { app } from './app';
+import { app, initializeApp } from './app';
 import { initializeDatabase } from './database/init';
 import newsFeedService from './services/newsFeedService';
 import twitterMonitorService from './services/twitterMonitorService';
-// NFT 同步服务已在 app.ts 中通过 multiChainNftSync 启动
 // import { priceCollector } from './services/priceCollector';
 // import { hotPairsMonitor } from './services/hotPairsMonitor';
 
@@ -16,8 +15,8 @@ const HOST = process.env.HOST || '0.0.0.0';
 
 const startServer = async () => {
   try {
-    // Initialize the database
-    await initializeDatabase();
+    // Initialize the app (database + all services including NFT sync)
+    await initializeApp();
 
     // Initialize news feed database
     try {
@@ -123,9 +122,6 @@ const startServer = async () => {
       console.error('Error details:', error?.message);
       console.error('Stack trace:', error?.stack);
     }
-
-    // NFT 同步服务已在 app.ts 中通过 multiChainNftSync 启动
-    // 无需在这里重复启动
 
     // 图表功能已移除 - 禁用价格收集服务
     // Start price collector for X Layer chart data
