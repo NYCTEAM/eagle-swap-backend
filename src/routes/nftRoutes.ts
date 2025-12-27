@@ -161,7 +161,23 @@ router.get('/user/:address', async (req, res) => {
         pending_rewards: miningStats.pendingReward / userNFTs.length, // 平均分配到每个NFT
         minted_at: nft.minted_at,
         payment_method: nft.payment_method || 'USDT',
-        purchase_time: new Date((nft.minted_at || 0) * 1000).toISOString(),
+        purchase_time: (() => {
+          try {
+            // 如果 minted_at 是 ISO 字符串，直接使用
+            if (typeof nft.minted_at === 'string' && nft.minted_at.includes('T')) {
+              return nft.minted_at;
+            }
+            // 如果是时间戳，转换为 ISO 字符串
+            const timestamp = Number(nft.minted_at) || 0;
+            if (timestamp > 0) {
+              return new Date(timestamp * 1000).toISOString();
+            }
+            // 如果没有有效时间，使用 created_at 或当前时间
+            return nft.created_at || new Date().toISOString();
+          } catch (e) {
+            return nft.created_at || new Date().toISOString();
+          }
+        })(),
         created_at: nft.created_at,
         chain_id: chainId,
         chain_name: nft.chain_name,

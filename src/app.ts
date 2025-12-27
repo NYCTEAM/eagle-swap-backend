@@ -274,8 +274,8 @@ const initializeApp = async () => {
     await initDatabase();
     logger.info('Database initialized successfully');
     
-    // 启动多链NFT同步服务
-    const useMultiChain = process.env.USE_MULTICHAIN_NFT_SYNC === 'true';
+    // 启动多链NFT同步服务（默认启用）
+    const useMultiChain = process.env.USE_MULTICHAIN_NFT_SYNC !== 'false';
     
     if (useMultiChain) {
       await multiChainNftSync.start();
