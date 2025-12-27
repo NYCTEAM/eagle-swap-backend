@@ -210,9 +210,11 @@ class ChainSync {
 
       // 分批查询事件（避免RPC限制）
       const batchSize = 5000;
+      
       for (let start = fromBlock; start <= currentBlock; start += batchSize) {
         const end = Math.min(start + batchSize - 1, currentBlock);
         
+        // 同步 Mint 事件
         const mintEvents = await this.contract.queryFilter(
           this.contract.filters.NFTMinted(),
           start,
@@ -223,14 +225,31 @@ class ChainSync {
           await this.handleMintEvent(event);
         }
 
-        // 更新同步进度
-        db.prepare('UPDATE sync_status SET last_synced_block = ?, last_sync_time = CURRENT_TIMESTAMP WHERE chain_id = ?')
-          .run(end, this.config.chainId);
-      }
+        // 同步 Transfer 事件（排除 mint 事件，即 from != 0x0）
+        const transferEvents = await this.contract.queryFilter(
+          this.contract.filters.Transfer(),
+          start,
+          end
+        );
 
-      console.log(`✅ ${this.config.chainName}: Historical sync completed`);
+        for (const event of transferEvents) {
+          if ('args' in event) {
+            const { from, to, tokenId } = event.args as any;
+            // 只处理非 mint 的转账（from 不是零地址）
+            if (from !== ethers.ZeroAddress) {
+              await this.handleTransferEvent(from, to, tokenId);
+            }
+          }
+        }
+
+        // 更新同步进度
+        db.prepare('UPDATE sync_status SET last_synced_block = ?, last_sync_time = ? WHERE chain_id = ?')
+          .run(end, new Date().toISOString(), this.config.chainId);
+        
+        console.log(`✅ ${this.config.chainName}: Synced blocks ${start} to ${end} (Mints: ${mintEvents.length}, Transfers: ${transferEvents.filter((e: any) => e.args.from !== ethers.ZeroAddress).length})`);
+      }
     } catch (error) {
-      console.error(`❌ ${this.config.chainName}: Historical sync failed:`, error);
+      console.error(`❌ ${this.config.chainName}: Failed to sync historical events:`, error);
     }
   }
 
