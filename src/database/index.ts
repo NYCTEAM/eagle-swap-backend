@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 
-const dbPath = path.join(__dirname, '../../data/eagleswap.db');
+const dbPath = process.env.DATABASE_PATH || path.join(__dirname, '../../data/eagleswap.db');
 const schemaPath = path.join(__dirname, 'schema.sql');
 
 // 确保 data 目录存在
